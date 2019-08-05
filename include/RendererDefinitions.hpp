@@ -30,6 +30,7 @@ struct Camera
     sr::math::Matrix4x4 proj = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 view = sr::math::CreateIdentityMatrix();
     sr::math::Vec3 pos = {};
+    sr::math::Vec3 jitter = {};
     float yWorldAndle = 0;
 };
 

@@ -246,11 +246,11 @@ void main()
     }
     else if (uRenderModeUint == 4) // Depth
     {
-        outColor = vec4(gl_FragCoord.zzz, 1);
+        outColor = vec4(vec3(pow(gl_FragCoord.z, 4096)), 1);
     }
     else if (uRenderModeUint == 5) // ShadowMap
     {
-        outColor = vec4(vec3(depth), 1);
+        outColor = vec4(vec3(pow(depth, 4096)), 1);
     }
     else if (uRenderModeUint == 6) // Metallic
     {

@@ -17,6 +17,7 @@ DirectionalLightSource g_directLight = {
 bool g_captureMouse = false;
 bool g_drawUi = false;
 bool g_isHotRealoadRequired = false;
+bool g_isPipelineReloadRequired = false;
 uint32_t g_shadowMapsMode = 1;
 uint32_t g_bumpMappingEnabled = 1;
 float g_bumpMapScaleFactor = 0.00001f;
@@ -142,6 +143,7 @@ void KeyCallback(GLFWwindow *window, int key, int scancode, int action, int mods
 void WindowSizeCallback(GLFWwindow *window, int width, int height)
 {
     g_camera.proj = sr::math::CreatePerspectiveProjectionMatrix(0.1f, 10000.f, 1.0472f, static_cast<float>(width) / height);
+    g_isPipelineReloadRequired = true;
 }
 
 void CursorPosCallback(GLFWwindow *window, double x, double y)
@@ -232,7 +234,7 @@ std::vector<RenderModel> LoadModels(GLuint program)
     return models;
 }
 
-RenderPass CreateLightingRenderPass(GLFWwindow *window)
+RenderPass CreateLightingRenderPass(GLFWwindow *window, ShaderProgram program)
 {
     static int displayWidth = 0, displayHeight = 0;
     glfwGetFramebufferSize(window, &displayWidth, &displayHeight);
@@ -240,10 +242,29 @@ RenderPass CreateLightingRenderPass(GLFWwindow *window)
     RenderPass lightingRenderPass;
     glGenFramebuffers(1, &lightingRenderPass.fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, lightingRenderPass.fbo);
-    lightingRenderPass.colorTexture = CreateTexture(
-        sr::load::TextureSource{"", nullptr, displayWidth, displayHeight, 4, GL_RGBA});
-    lightingRenderPass.depthTexture = CreateDepthTexture(displayWidth, displayHeight);
-    lightingRenderPass.program = CreateShaderProgram(
+    {
+        lightingRenderPass.program = program;
+        lightingRenderPass.colorTexture = CreateTexture(
+            sr::load::TextureSource{"", nullptr, displayWidth, displayHeight, 4, GL_RGBA});
+        lightingRenderPass.depthTexture = CreateDepthTexture(displayWidth, displayHeight);
+
+        glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, lightingRenderPass.colorTexture, 0);
+        glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, lightingRenderPass.depthTexture, 0);
+        glDrawBuffers(1, &GL_COLOR_ATTACHMENT0);
+    }
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    { //Check for FBO completeness
+        std::cerr << "Error! FrameBuffer is not complete" << std::endl;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    return lightingRenderPass;
+}
+
+RenderPass CreateLightingRenderPass(GLFWwindow *window)
+{
+    auto program = CreateShaderProgram(
         "shaders/lighting.vert", "shaders/lighting.frag",
         UniformsDescriptor{
             //uint32_t
@@ -273,35 +294,59 @@ RenderPass CreateLightingRenderPass(GLFWwindow *window)
                 {"uProjMat", "uViewMat", "uDirLightProjMat", "uDirLightViewMat"},
                 {g_camera.proj.data, g_camera.view.data, g_directLight.projection.data, g_directLight.view.data}}});
 
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, lightingRenderPass.colorTexture, 0);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, lightingRenderPass.depthTexture, 0);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-    return lightingRenderPass;
+    return CreateLightingRenderPass(window, program);
 }
 
-RenderPass CreateShadowMappingRenderPass(GLFWwindow *window)
+RenderPass CreateShadowMappingRenderPass(GLFWwindow *window, ShaderProgram program)
 {
     RenderPass shadowMappingPass;
-    shadowMappingPass.program = CreateShaderProgram(
-        "shaders/shadow_mapping.vert", "shaders/shadow_mapping.frag",
-        UniformsDescriptor{
-            {}, {}, {}, UniformsDescriptor::MAT4{{"uProjMat", "uViewMat"}, {g_directLight.projection.data, g_directLight.view.data}}});
+    shadowMappingPass.program = program;
     glGenFramebuffers(1, &shadowMappingPass.fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, shadowMappingPass.fbo);
-    shadowMappingPass.depthTexture = CreateDepthTexture(4096, 4096);
-    glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, shadowMappingPass.depthTexture, 0);
+    {
+        shadowMappingPass.depthTexture = CreateDepthTexture(4096, 4096);
+        glFramebufferTexture(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, shadowMappingPass.depthTexture, 0);
+        glDrawBuffers(1, &GL_NONE);
+    }
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    { //Check for FBO completeness
+        std::cerr << "Error! FrameBuffer is not complete" << std::endl;
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     return shadowMappingPass;
 }
 
-RenderPass CreateTaaRenderPass(GLFWwindow *window)
+RenderPass CreateShadowMappingRenderPass(GLFWwindow *window)
+{
+    auto program = CreateShaderProgram(
+        "shaders/shadow_mapping.vert", "shaders/shadow_mapping.frag",
+        UniformsDescriptor{
+            {}, {}, {}, UniformsDescriptor::MAT4{{"uProjMat", "uViewMat"}, {g_directLight.projection.data, g_directLight.view.data}}});
+
+    return CreateShadowMappingRenderPass(window, program);
+}
+
+RenderPass CreateTaaRenderPass(GLFWwindow *window, ShaderProgram program)
 {
     static int displayWidth = 0, displayHeight = 0;
     glfwGetFramebufferSize(window, &displayWidth, &displayHeight);
 
     RenderPass taaPass;
-    taaPass.program = CreateShaderProgram(
+    taaPass.colorTexture = CreateTexture(
+        sr::load::TextureSource{"", nullptr, displayWidth, displayHeight, 4, GL_RGBA});
+    taaPass.program = program;
+    glGenFramebuffers(1, &taaPass.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, taaPass.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    return taaPass;
+}
+
+RenderPass CreateTaaRenderPass(GLFWwindow *window)
+{
+    auto program = CreateShaderProgram(
         "shaders/taa.vert", "shaders/taa.frag",
         UniformsDescriptor{
             {},
@@ -309,17 +354,13 @@ RenderPass CreateTaaRenderPass(GLFWwindow *window)
             {},
             {},
         });
-    glGenFramebuffers(1, &taaPass.fbo);
-    glBindFramebuffer(GL_FRAMEBUFFER, taaPass.fbo);
-    taaPass.colorTexture = CreateTexture(
-        sr::load::TextureSource{"", nullptr, displayWidth, displayHeight, 4, GL_RGBA});
 
-    return taaPass;
+    return CreateTaaRenderPass(window, program);
 }
 
-void RenderPassLighting(GLFWwindow *window, RenderPass const &pass, std::vector<RenderModel> const &models)
+void RenderPassLighting(GLFWwindow *window, GLuint shadowMapTexture, RenderPass const &pass, std::vector<RenderModel> const &models)
 {
-    //glBindFramebuffer(GL_FRAMEBUFFER, pass.fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, pass.fbo);
 
     glUseProgram(pass.program.handle);
     static int displayWidth = 0, displayHeight = 0;
@@ -327,11 +368,15 @@ void RenderPassLighting(GLFWwindow *window, RenderPass const &pass, std::vector<
     glViewport(0, 0, displayWidth, displayHeight);
     glScissor(0, 0, displayWidth, displayHeight);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    g_camera.view = CreateViewMatrix(g_camera.pos, g_camera.yWorldAndle);
+    g_camera.jitter = sr::math::CreateUniformRandomVec3(-1, +1);
+    g_camera.view = CreateViewMatrix(g_camera.pos + g_camera.jitter, g_camera.yWorldAndle);
 
     auto const colorVectorMatrix = glGetUniformLocation(pass.program.handle, "uColor");
     auto const cameraPosVector = glGetUniformLocation(pass.program.handle, "uCameraPos");
     auto const modelMatrixLocation = glGetUniformLocation(pass.program.handle, "uModelMat");
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, shadowMapTexture);
 
     for (uint32_t i = 0; i < models.size(); ++i)
     {
@@ -393,13 +438,12 @@ void RenderPassLighting(GLFWwindow *window, RenderPass const &pass, std::vector<
         glDrawElements(GL_TRIANGLES, models[i].indexCount, GL_UNSIGNED_INT, nullptr);
     }
 
-    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void RenderPassShadowMap(GLFWwindow *window, RenderPass const &pass, std::vector<RenderModel> const &models)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, pass.fbo);
-    glBindTexture(GL_TEXTURE_2D, pass.depthTexture);
 
     glUseProgram(pass.program.handle);
     glViewport(0, 0, 4096, 4096);
@@ -431,23 +475,43 @@ void RenderPassShadowMap(GLFWwindow *window, RenderPass const &pass, std::vector
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void RenderPassTAA(GLFWwindow *window, RenderPass const &pass)
+void RenderPassTAA(GLFWwindow *window, GLuint colorTexture, GLuint depthTexture, RenderPass const &pass)
 {
-    glBindFramebuffer(GL_FRAMEBUFFER, pass.fbo);
-    glBindTexture(GL_TEXTURE_2D, pass.colorTexture);
+    //glBindFramebuffer(GL_FRAMEBUFFER, pass.fbo);
+
+    static std::vector<AttributeDescriptor> const attributes = {
+        {"aPosition", pass.program.handle, 3, sizeof(sr::math::Vec3)},
+        {"aNormal", pass.program.handle, 3, sizeof(sr::math::Vec3)},
+        {"aUV", pass.program.handle, 2, sizeof(sr::math::Vec2)},
+    };
+    static RenderModel model = CreateRenderModel(attributes,
+                                                 sr::load::CreateBufferDescriptors(g_quadWall),
+                                                 sr::load::CreateIndexBufferDescriptor(g_quadWall),
+                                                 {});
 
     static int displayWidth = 0, displayHeight = 0;
     glfwGetFramebufferSize(window, &displayWidth, &displayHeight);
-
     static TAABuffer taaBuffer = CreateTAABuffer(displayWidth, displayHeight, 2);
     static uint32_t current = 0;
 
-    glActiveTexture(GL_TEXTURE0 + 6);
+    glUseProgram(pass.program.handle);
+    glViewport(0, 0, displayWidth, displayHeight);
+    glScissor(0, 0, displayWidth, displayHeight);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, colorTexture);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, depthTexture);
+
+    glBindVertexArray(model.vertexArrayObject);
+    glDrawElements(GL_TRIANGLES, model.indexCount, GL_UNSIGNED_INT, nullptr);
     glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, displayWidth, displayHeight);
 
     current = current + 1 == taaBuffer.count ? current = 0 : current + 1;
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    //glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void ConfigureGL()
@@ -484,12 +548,22 @@ void MainLoop(GLFWwindow *window)
             taaPass = CreateTaaRenderPass(window);
 
             std::cout << "Hot reloaded" << std::endl;
+
             g_isHotRealoadRequired = false;
+            g_isPipelineReloadRequired = false;
+        }
+        else if (g_isPipelineReloadRequired)
+        {
+            lightingPass = CreateLightingRenderPass(window, lightingPass.program);
+            shadowMappingPass = CreateShadowMappingRenderPass(window, shadowMappingPass.program);
+            taaPass = CreateTaaRenderPass(window, taaPass.program);
+
+            g_isPipelineReloadRequired = false;
         }
 
         RenderPassShadowMap(window, shadowMappingPass, models);
-        RenderPassLighting(window, lightingPass, models);
-        RenderPassTAA(window, taaPass);
+        RenderPassLighting(window, shadowMappingPass.depthTexture, lightingPass, models);
+        RenderPassTAA(window, lightingPass.colorTexture, lightingPass.depthTexture, taaPass);
 
         if (g_drawUi)
         {

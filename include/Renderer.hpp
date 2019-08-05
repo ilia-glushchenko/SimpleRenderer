@@ -165,7 +165,7 @@ GLFWwindow *InitializeGLFW()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
 
-    GLFWwindow *window = glfwCreateWindow(1080, 1080, "Simple Renderer", nullptr, nullptr);
+    GLFWwindow *window = glfwCreateWindow(900, 900, "Simple Renderer", nullptr, nullptr);
     if (!window)
     {
         std::cerr << "Failed to create window" << std::endl;
@@ -239,6 +239,7 @@ Camera CreateCamera()
     camera.view = sr::math::CreateIdentityMatrix();
     camera.pos = {};
     camera.yWorldAndle = 0;
+    camera.jitter = {};
 
     return camera;
 }
