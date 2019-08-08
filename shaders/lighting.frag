@@ -1,17 +1,17 @@
 #version 460
 
 layout (location = 10) uniform vec3 uColor;
-layout (location = 13) uniform mat4 uModelMat;
+layout (location = 11) uniform mat4 uModelMat;
 
-layout (location = 16) uniform uint uRenderModeUint;
-layout (location = 17) uniform uint uShadowMappingEnabledUint;
-layout (location = 18) uniform uint uBumpMapAvailableUint;
-layout (location = 19) uniform uint uMetallicMapAvailableUint;
-layout (location = 20) uniform uint uRoughnessMapAvailableUint;
-layout (location = 21) uniform uint uBumpMappingEnabledUint;
-layout (location = 22) uniform float uBumpMapScaleFactorFloat;
-layout (location = 23) uniform vec3 uCameraPos;
-layout (location = 24) uniform vec3 uPointLightPos;
+layout (location = 17) uniform uint uRenderModeUint;
+layout (location = 18) uniform uint uShadowMappingEnabledUint;
+layout (location = 19) uniform uint uBumpMapAvailableUint;
+layout (location = 20) uniform uint uMetallicMapAvailableUint;
+layout (location = 21) uniform uint uRoughnessMapAvailableUint;
+layout (location = 22) uniform uint uBumpMappingEnabledUint;
+layout (location = 23) uniform float uBumpMapScaleFactorFloat;
+layout (location = 24) uniform vec3 uCameraPos;
+layout (location = 25) uniform vec3 uPointLightPos;
 
 layout (binding = 0) uniform sampler2D uShadowMapSampler2D;
 layout (binding = 1) uniform sampler2D uAlbedoMapSampler2D;
@@ -169,9 +169,9 @@ vec3 CookTorance(vec3 ssAbledo, vec3 lightColor, vec3 v, vec3 n, vec3 l, float r
     float F = FresnelSchlick(FresnelSchlickF0(AirIOR, MarbleIOR), h, l);
 
     float fSpec = (F * G2 * D) / (4 * abs(dot(n, l)) * abs(dot(n, v)));
-    
+
     return (1 - F)*ssAbledo / PI + PI * fSpec * lightColor * max(dot(n, l), 0);
-} 
+}
 
 void main()
 {
@@ -183,34 +183,36 @@ void main()
 
     mat3 TBN = cotangent_frame(n, positionWorld.xyz / positionWorld.w, inUv);
     vec2 uv = inUv;
-    
+
     if (uRenderModeUint == 0) // Full
     {
         vec3 view = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
-        
+
         if (bool(uBumpMapAvailableUint) && bool(uBumpMappingEnabledUint))
         {
             float h = texture(uBumpMapSampler2D, uv).r;
             uv = uv + h * (TBN * view.xyz).xy * uBumpMapScaleFactorFloat;
         }
-        
+
         vec3 color = texture(uAlbedoMapSampler2D, uv).rgb;
         vec3 normal = normalize((texture(uNormalMapSampler2D, uv).xyz * 2) - 1);
         normal = normalize(n + TBN * normal);
         float ro = bool(uRoughnessMapAvailableUint) ? texture(uRoughnessSampler2D, uv).r : 1;
-        
+
         vec3 endColor = vec3(0);
         vec3 sunColor = vec3(252.0 / 255.0, 212/ 255.0, 64 / 255.0); // Sun
-        if (bool(uShadowMappingEnabledUint) && abs(shadowPosMVP.z) < depth - 0.45f)
+        float i = 1;
+        if (bool(uShadowMappingEnabledUint) && abs(shadowPosMVP.z) > depth - 0.45f)
         {
-            endColor = CookTorance(color, sunColor, view, normal, directionalLightDir, ro);
+            i = 0.5f;
+            //endColor = CookTorance(color, sunColor, view, normal, directionalLightDir, ro);
         }
 
         float d = distance(uPointLightPos, positionWorld.xyz / positionWorld.w);
-        
+
         vec3 lightColor = vec3(255.0 / 255.0, 209/ 255.0, 163 / 255.0); // 4000k
         vec3 pointLightDir = -normalize(positionWorld.xyz / positionWorld.w - uPointLightPos);
-        outColor = vec4(endColor + CookTorance(color, lightColor, view, normal, pointLightDir, ro) / (d / 500), 1); 
+        outColor = vec4(endColor + i * CookTorance(color, lightColor, view, normal, pointLightDir, ro), 1);
     }
     else if (uRenderModeUint == 1) // Normal
     {
@@ -255,7 +257,7 @@ void main()
     }
     else if (uRenderModeUint == 7) // Roughness
     {
-        outColor = bool(uRoughnessMapAvailableUint) 
+        outColor = bool(uRoughnessMapAvailableUint)
             ? vec4(texture(uRoughnessSampler2D, uv).rrr, 1)
             : vec4(n + vec3(1, 0, 0), 1);
     }

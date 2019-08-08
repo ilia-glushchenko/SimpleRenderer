@@ -32,6 +32,11 @@ struct Vec2
     {
         return {-x, -y};
     }
+
+    Vec2 operator/(float s) const
+    {
+        return {x / s, y / s};
+    }
 };
 
 struct Vec3

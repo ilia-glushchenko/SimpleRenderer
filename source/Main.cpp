@@ -152,7 +152,7 @@ void GLFWWindowSizeCallback(GLFWwindow *window, int width, int height)
     g_camera.aspect = static_cast<float>(width) / height;
 
     g_camera.proj = sr::math::CreatePerspectiveProjectionMatrix(g_camera.near, g_camera.far, g_camera.fov, g_camera.aspect);
-    g_taaBuffer.jitter = {};
+    g_taaBuffer.jitter = sr::math::CreateIdentityMatrix();
 
     g_isHotRealoadRequired = true;
     g_isPipelineReloadRequired = true;
@@ -335,8 +335,16 @@ RenderPass CreateRenderPassLighting(GLFWwindow *window, int32_t width, int32_t h
                 {g_camera.pos.data, g_lightPosition}},
             //mat4
             UniformsDescriptor::MAT4{
-                {"uProjMat", "uViewMat", "uDirLightProjMat", "uDirLightViewMat"},
-                {g_camera.proj.data, g_camera.view.data, g_directLight.projection.data, g_directLight.view.data}}});
+                {"uProjMat",
+                 "uViewMat",
+                 "uJitterMat",
+                 "uDirLightProjMat",
+                 "uDirLightViewMat"},
+                {g_camera.proj.data,
+                 g_camera.view.data,
+                 g_taaBuffer.jitter.data,
+                 g_directLight.projection.data,
+                 g_directLight.view.data}}});
 
     return CreateRenderPassLighting(window, width, height, program);
 }
@@ -390,13 +398,12 @@ RenderPass CreateRenderPassTAA(GLFWwindow *window, int32_t width, int32_t height
             UniformsDescriptor::FLOAT{
                 {"uNearFloat", "uFarFloat"},
                 {&g_camera.near, &g_camera.far}},
-            UniformsDescriptor::FLOAT3{
-                {"uJitVec3"},
-                {g_taaBuffer.jitter.data}},
+            UniformsDescriptor::FLOAT3{},
             UniformsDescriptor::MAT4{
-                {"uViewMat", "uProjMat", "uPrevViewMat", "uPrevProjMat"},
+                {"uViewMat", "uProjMat", "uJitterMat", "uPrevViewMat", "uPrevProjMat"},
                 {g_camera.view.data,
                  g_camera.proj.data,
+                 g_taaBuffer.jitter.data,
                  g_taaBuffer.prevView.data,
                  g_taaBuffer.prevProj.data}},
         });
@@ -480,27 +487,10 @@ void RenderPassLighting(GLFWwindow *window, RenderPass const &pass, std::vector<
     glBindFramebuffer(GL_FRAMEBUFFER, pass.fbo1);
     {
         g_camera.view = CreateViewMatrix(g_camera.pos, g_camera.yWorldAndle);
-        if (g_taaBuffer.count >= 2)
-        {
-            float const jitX = sr::math::CreateUniformRandomFloat(-1.f, 1.f) / 10000.f;
-            float const jitY = sr::math::CreateUniformRandomFloat(-1.f, 1.f) / 10000.f;
-
-            g_camera.proj = sr::math::CreatePerspectiveProjectionMatrixSheared(g_camera.near, g_camera.far, g_camera.fov, g_camera.aspect, jitX, jitY);
-
-            float const lx = std::tan(g_camera.fov / 2);
-            float const rx = -lx;
-            float vfov = g_camera.fov / g_camera.aspect;
-            float const ty = std::tan(vfov / 2);
-            float const by = -ty;
-
-            g_taaBuffer.jitter = {jitX / (rx - lx), jitY / (ty - by), 0};
-        }
-        else
-        {
-            g_camera.proj = sr::math::CreatePerspectiveProjectionMatrix(g_camera.near, g_camera.far, g_camera.fov, g_camera.aspect);
-        }
-        auto const colorVectorLocation = glGetUniformLocation(pass.program.handle, "uColor");
-        auto const modelMatrixLocation = glGetUniformLocation(pass.program.handle, "uModelMat");
+        g_camera.proj = sr::math::CreatePerspectiveProjectionMatrix(g_camera.near, g_camera.far, g_camera.fov, g_camera.aspect);
+        const uint32_t taaSampleIndex = g_taaBuffer.count % g_taaSubPixelSampleCount;
+        g_taaBuffer.jitter._14 = g_taaSubPixelSamples[taaSampleIndex].x / pass.width;
+        g_taaBuffer.jitter._24 = g_taaSubPixelSamples[taaSampleIndex].y / pass.height;
 
         glUseProgram(pass.program.handle);
         glViewport(0, 0, pass.width, pass.height);
@@ -509,6 +499,8 @@ void RenderPassLighting(GLFWwindow *window, RenderPass const &pass, std::vector<
 
         BindRenderPassDependencies(pass.dependencies, pass.dependencyCount);
         UpdateGlobalUniforms(pass.program);
+        auto const colorVectorLocation = glGetUniformLocation(pass.program.handle, "uColor");
+        auto const modelMatrixLocation = glGetUniformLocation(pass.program.handle, "uModelMat");
 
         for (uint32_t i = 0; i < models.size(); ++i)
         {

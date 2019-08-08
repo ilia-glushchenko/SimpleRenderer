@@ -98,3 +98,22 @@ static std::vector<AttributeDescriptor> const g_defaultShaderProgramAttributes =
 };
 
 static RenderModel g_quadWallRenderModel;
+
+constexpr uint32_t g_taaSubPixelSampleCount = 16;
+const sr::math::Vec2 g_taaSubPixelSamples[16] = {
+    sr::math::Vec2{-8.0f, 0.0f} / 8.0f,
+    sr::math::Vec2{-6.0f, -4.0f} / 8.0f,
+    sr::math::Vec2{-3.0f, -2.0f} / 8.0f,
+    sr::math::Vec2{-2.0f, -6.0f} / 8.0f,
+    sr::math::Vec2{1.0f, -1.0f} / 8.0f,
+    sr::math::Vec2{2.0f, -5.0f} / 8.0f,
+    sr::math::Vec2{6.0f, -7.0f} / 8.0f,
+    sr::math::Vec2{5.0f, -3.0f} / 8.0f,
+    sr::math::Vec2{4.0f, 1.0f} / 8.0f,
+    sr::math::Vec2{7.0f, 4.0f} / 8.0f,
+    sr::math::Vec2{3.0f, 5.0f} / 8.0f,
+    sr::math::Vec2{0.0f, 7.0f} / 8.0f,
+    sr::math::Vec2{-1.0f, 3.0f} / 8.0f,
+    sr::math::Vec2{-4.0f, 6.0f} / 8.0f,
+    sr::math::Vec2{-7.0f, 8.0f} / 8.0f,
+    sr::math::Vec2{-5.0f, 2.0f} / 8.0f};

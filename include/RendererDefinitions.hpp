@@ -131,7 +131,7 @@ struct TAABuffer
 {
     sr::math::Matrix4x4 prevView = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 prevProj = sr::math::CreateIdentityMatrix();
-    sr::math::Vec3 jitter = {};
+    sr::math::Matrix4x4 jitter = sr::math::CreateIdentityMatrix();
 
     union {
         struct
