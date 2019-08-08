@@ -208,6 +208,25 @@ Matrix4x4 CreatePerspectiveProjectionMatrix(float near, float far, float fov, fl
     return mat;
 }
 
+Matrix4x4 CreatePerspectiveProjectionMatrixSheared(float near, float far, float fov, float aspect, float xShear, float yShear)
+{
+    Matrix4x4 mat = CreatePerspectiveProjectionMatrix(near, far, fov, aspect);
+
+    float a = 2 * xShear;
+    float b = aspect * std::tan(fov * 0.5f) * 2.f * near;
+    float left = (a - b) / 2.f;
+    float right = a - left;
+    mat._13 = -(right + left) / (right - left);
+
+    a = 2 * yShear;
+    b = 2 * near * std::tan(fov * 0.5f);
+    float top = (a - b) / 2.f;
+    float bottom = a - top;
+    mat._23 = -(top + bottom) / (top - bottom);
+
+    return mat;
+}
+
 constexpr Matrix4x4 CreatePerspectiveProjectionMatrix(float left, float right, float bottom, float top, float near, float far)
 {
     Matrix4x4 mat = {};

@@ -42,9 +42,10 @@ include_directories(
 set(SIMPLE_REDNERER_HEADERS
     include/Math.hpp
     include/Loader.hpp
-    include/Renderer.hpp
     include/TestModels.hpp
     include/RendererDefinitions.hpp
+    include/Renderer.hpp
+    include/RenderPass.hpp
 )
 
 set(SIMPLE_RENDERER_SOURCES

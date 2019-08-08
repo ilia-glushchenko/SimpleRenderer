@@ -1,20 +1,15 @@
-#version 440
-#extension GL_ARB_derivative_control : require 
+#version 460
 
 layout (location = 10) uniform vec3 uColor;
-layout (location = 12) uniform mat4 uViewMat;
 layout (location = 13) uniform mat4 uModelMat;
 
 layout (location = 16) uniform uint uRenderModeUint;
 layout (location = 17) uniform uint uShadowMappingEnabledUint;
-
 layout (location = 18) uniform uint uBumpMapAvailableUint;
 layout (location = 19) uniform uint uMetallicMapAvailableUint;
 layout (location = 20) uniform uint uRoughnessMapAvailableUint;
-
 layout (location = 21) uniform uint uBumpMappingEnabledUint;
 layout (location = 22) uniform float uBumpMapScaleFactorFloat;
-
 layout (location = 23) uniform vec3 uCameraPos;
 layout (location = 24) uniform vec3 uPointLightPos;
 

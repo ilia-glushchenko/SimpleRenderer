@@ -5,6 +5,7 @@
  */
 #pragma once
 
+#include "TestModels.hpp"
 #include "RendererDefinitions.hpp"
 
 #include "imgui.h"
@@ -14,11 +15,26 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
+#include <ctime>
 #include <cassert>
 #include <unordered_map>
 
 namespace
 {
+void GLAPIENTRY
+MessageCallback(GLenum source,
+                GLenum type,
+                GLuint id,
+                GLenum severity,
+                GLsizei length,
+                const GLchar *message,
+                const void *userParam)
+{
+    fprintf(stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n\n",
+            (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""),
+            type, severity, message);
+}
+
 GLuint CreateShader(GLenum shaderType, const char *code)
 {
     if (code == nullptr)
@@ -116,21 +132,6 @@ std::vector<uint32_t> CreateBuffers(std::vector<BufferDescriptor> const &bufferD
     return vbos;
 }
 
-void CreateAttributes(
-    std::vector<AttributeDescriptor> const &attribs,
-    std::vector<uint32_t> const &vbos)
-{
-    assert(attribs.size() == vbos.size());
-
-    for (uint32_t i = 0; i < attribs.size(); ++i)
-    {
-        int32_t const location = glGetAttribLocation(attribs[i].program, attribs[i].name.c_str());
-        glBindBuffer(GL_ARRAY_BUFFER, vbos[i]);
-        glEnableVertexAttribArray(location);
-        glVertexAttribPointer(location, attribs[i].dimensions, GL_FLOAT, GL_FALSE, attribs[i].stride, reinterpret_cast<void *>(0));
-    }
-}
-
 template <typename T, typename D>
 std::vector<T> GetUniformLocations(GLuint program, std::vector<D *> const &data, std::vector<std::string> const &names)
 {
@@ -154,63 +155,19 @@ std::vector<T> GetUniformLocations(GLuint program, std::vector<D *> const &data,
 }
 } // namespace
 
-GLFWwindow *InitializeGLFW()
-{
-    if (!glfwInit())
-    {
-        std::cerr << "Failed to init GLFW" << std::endl;
-        return nullptr;
-    }
-
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
-
-    GLFWwindow *window = glfwCreateWindow(900, 900, "Simple Renderer", nullptr, nullptr);
-    if (!window)
-    {
-        std::cerr << "Failed to create window" << std::endl;
-        glfwTerminate();
-        return nullptr;
-    }
-
-    glfwMakeContextCurrent(window);
-    glbinding::Binding::initialize(glfwGetProcAddress);
-
-    return window;
-}
-
-void InitializeImGui(GLFWwindow *window)
-{
-    const char *glsl_version = "#version 440";
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::StyleColorsDark();
-    ImGui_ImplGlfw_InitForOpenGL(window, true);
-    ImGui_ImplOpenGL3_Init(glsl_version);
-
-    auto &io = ImGui::GetIO();
-    io.KeyMap[ImGuiKey_Delete] = GLFW_KEY_DELETE;
-    io.KeyMap[ImGuiKey_Backspace] = GLFW_KEY_BACKSPACE;
-}
-
-void DeinitializeImGui()
-{
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
-}
-
-void DeinitializeGLFW(GLFWwindow *window)
-{
-    glfwDestroyWindow(window);
-    glfwTerminate();
-}
-
 ShaderProgram CreateShaderProgram(char const *vert, char const *frag, UniformsDescriptor const &uniformsDescriptor)
 {
     auto const vertexShaderHandle = ::CreateShader(GL_VERTEX_SHADER, sr::load::LoadFile(vert).c_str());
     auto const fragmentShaderHandle = ::CreateShader(GL_FRAGMENT_SHADER, sr::load::LoadFile(frag).c_str());
     auto const program = CreateShaderProgram(vertexShaderHandle, fragmentShaderHandle);
+    if (program != 0)
+    {
+        std::time_t const timestamp = std::time(nullptr);
+        std::cout << "Shader program created:\n"
+                  << "Vertex   shader: " << vert << "\n"
+                  << "Fragment shader: " << frag << "\n"
+                  << std::asctime(std::localtime(&timestamp)) << std::endl;
+    }
 
     return ShaderProgram{
         GetUniformLocations<UniformUi32>(program, uniformsDescriptor.ui32.data, uniformsDescriptor.ui32.names),
@@ -235,11 +192,14 @@ Camera CreateCamera()
 {
     Camera camera;
 
-    camera.proj = sr::math::CreatePerspectiveProjectionMatrix(0.1f, 10000.f, 1.0472f, 1.f);
+    camera.fov = 1.0472f;
+    camera.aspect = 1;
+    camera.near = 0.1f;
+    camera.far = 10000.f;
+    camera.proj = sr::math::CreatePerspectiveProjectionMatrix(camera.near, camera.far, camera.fov, 1.f);
     camera.view = sr::math::CreateIdentityMatrix();
-    camera.pos = {};
-    camera.yWorldAndle = 0;
-    camera.jitter = {};
+    camera.pos = {-1217.f, 101.f, 40.f};
+    camera.yWorldAndle = -1.46f;
 
     return camera;
 }
@@ -276,12 +236,12 @@ GLuint InitializeTexture(Texture2DDescriptor const &desc, sr::load::TextureSourc
 void CreateTextures(sr::load::TextureSource const &source, Texture2DDescriptor const &desc, GLuint *handles, uint32_t count)
 {
     glGenTextures(count, handles);
-    glActiveTexture(GL_TEXTURE0);
 
     for (uint32_t i = 0; i < count; ++i)
     {
+        glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, handles[i]);
-        InitializeTexture(CreateDefaultTexture2DDescriptor(source), source);
+        InitializeTexture(desc, source);
     }
 }
 
@@ -354,7 +314,6 @@ void DeleteTextures(uint32_t count, GLuint *textures)
 }
 
 RenderModel CreateRenderModel(
-    std::vector<AttributeDescriptor> const &attributeDescriptors,
     std::vector<BufferDescriptor> const &bufferDescriptors,
     BufferDescriptor const &indexBufferDescriptor,
     sr::load::MaterialSource const &material)
@@ -366,8 +325,6 @@ RenderModel CreateRenderModel(
 
     glGenVertexArrays(1, &renderModel.vertexArrayObject);
     glBindVertexArray(renderModel.vertexArrayObject);
-
-    ::CreateAttributes(attributeDescriptors, renderModel.vbos);
 
     renderModel.indexBuffer = ::CreateBuffer();
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderModel.indexBuffer);
@@ -397,27 +354,107 @@ RenderModel CreateRenderModel(
     return renderModel;
 }
 
-TAABuffer CreateTAABuffer(uint32_t width, uint32_t height, uint32_t count)
+void LinkRenderModelToShaderProgram(
+    GLuint program,
+    RenderModel const &model,
+    std::vector<AttributeDescriptor> const &attribs)
 {
+    assert(attribs.size() == model.vbos.size());
+
+    for (uint32_t i = 0; i < attribs.size(); ++i)
+    {
+        int32_t const location = glGetAttribLocation(program, attribs[i].name.c_str());
+        glBindBuffer(GL_ARRAY_BUFFER, model.vbos[i]);
+        glEnableVertexAttribArray(location);
+        glVertexAttribPointer(location, attribs[i].dimensions, GL_FLOAT, GL_FALSE, attribs[i].stride, reinterpret_cast<void *>(0));
+    }
+}
+
+TAABuffer CreateTAABuffer(int32_t width, int32_t height)
+{
+    sr::load::TextureSource const source{"", nullptr, width, height, 4, GL_RGBA};
+
     TAABuffer taaBuffer;
-    taaBuffer.handles = reinterpret_cast<GLuint *>(std::malloc(sizeof(GLuint) * count));
-    taaBuffer.count = count;
-
-    sr::load::TextureSource source;
-    source.channels = 4;
-    source.data = nullptr;
-    source.height = height;
-    source.width = width;
-    source.filepath = "";
-    source.format = GL_RGBA;
-
-    CreateTextures(source, CreateDefaultTexture2DDescriptor(source), taaBuffer.handles, taaBuffer.count);
+    taaBuffer.count = 0;
+    CreateTextures(source, CreateDefaultTexture2DDescriptor(source), taaBuffer.textures, 2);
 
     return taaBuffer;
 }
 
-void FreeTAABuffer(TAABuffer &buffer)
+void DeleteTAABuffer(TAABuffer &buffer)
 {
-    DeleteTextures(buffer.count, buffer.handles);
-    std::free(buffer.handles);
+    DeleteTextures(1, &buffer.historyTexture);
+    DeleteTextures(1, &buffer.drawTexture);
+}
+
+GLFWwindow *InitializeGLFW(uint32_t width, uint32_t height)
+{
+    if (!glfwInit())
+    {
+        std::cerr << "Failed to init GLFW" << std::endl;
+        return nullptr;
+    }
+
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
+
+    GLFWwindow *window = glfwCreateWindow(width, height, "Simple Renderer", nullptr, nullptr);
+    if (!window)
+    {
+        std::cerr << "Failed to create window" << std::endl;
+        glfwTerminate();
+        return nullptr;
+    }
+
+    glfwMakeContextCurrent(window);
+    glbinding::Binding::initialize(glfwGetProcAddress);
+
+    return window;
+}
+
+void InitializeImGui(GLFWwindow *window)
+{
+    const char *glsl_version = "#version 460";
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGui::StyleColorsDark();
+    ImGui_ImplGlfw_InitForOpenGL(window, true);
+    ImGui_ImplOpenGL3_Init(glsl_version);
+
+    auto &io = ImGui::GetIO();
+    io.KeyMap[ImGuiKey_Delete] = GLFW_KEY_DELETE;
+    io.KeyMap[ImGuiKey_Backspace] = GLFW_KEY_BACKSPACE;
+}
+
+void ConfigureGL()
+{
+    //glEnable(GL_DEBUG_OUTPUT);
+    glDebugMessageCallback(::MessageCallback, 0);
+    glClearColor(1, 1, 1, 1);
+    glClearDepth(1.0f);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_DEPTH_TEST);
+    glFrontFace(GL_CW);
+    glCullFace(GL_BACK);
+}
+
+void InitializeGlobals()
+{
+    g_quadWallRenderModel = CreateRenderModel(sr::load::CreateBufferDescriptors(g_quadWall),
+                                              sr::load::CreateIndexBufferDescriptor(g_quadWall),
+                                              {});
+}
+
+void DeinitializeImGui()
+{
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+}
+
+void DeinitializeGLFW(GLFWwindow *window)
+{
+    glfwDestroyWindow(window);
+    glfwTerminate();
 }

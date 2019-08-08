@@ -1,4 +1,4 @@
-#version 440
+#version 460
 
 layout (location = 10) uniform vec3 uColor;
 layout (location = 11) uniform mat4 uProjMat;

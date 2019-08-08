@@ -25,13 +25,22 @@ struct Uniformf
 using UniformV3f = Uniformf;
 using UniformM4f = Uniformf;
 
+struct UniformTexture2D
+{
+    uint32_t handle = 0;
+    uint32_t unit = 0;
+};
+
 struct Camera
 {
     sr::math::Matrix4x4 proj = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 view = sr::math::CreateIdentityMatrix();
     sr::math::Vec3 pos = {};
-    sr::math::Vec3 jitter = {};
     float yWorldAndle = 0;
+    float near = 0;
+    float far = 0;
+    float fov = 0;
+    float aspect = 0;
 };
 
 struct DirectionalLightSource
@@ -76,7 +85,6 @@ struct BufferDescriptor
 struct AttributeDescriptor
 {
     std::string name;
-    uint32_t program = 0;
     uint32_t dimensions = 0;
     uint32_t stride = 0;
 };
@@ -121,15 +129,55 @@ struct Texture2DDescriptor
 
 struct TAABuffer
 {
-    GLuint *handles = nullptr;
+    sr::math::Matrix4x4 prevView = sr::math::CreateIdentityMatrix();
+    sr::math::Matrix4x4 prevProj = sr::math::CreateIdentityMatrix();
+    sr::math::Vec3 jitter = {};
+
+    union {
+        struct
+        {
+            GLuint drawTexture;
+            GLuint historyTexture;
+        };
+
+        GLuint textures[2] = {};
+    };
+
     uint32_t count = 0;
-    uint32_t current = 0;
 };
 
 struct RenderPass
 {
     ShaderProgram program = {};
-    GLuint fbo = 0;
-    GLuint colorTexture = 0;
-    GLuint depthTexture = 0;
+
+    static const uint8_t MAX_DEPENDENCIES = 8;
+
+    GLuint dependencies[MAX_DEPENDENCIES] = {};
+    uint8_t dependencyCount = 0;
+
+    int32_t width = 0;
+    int32_t height = 0;
+
+    const static uint32_t MAX_FBOS = 2;
+    const static uint32_t MAX_TEXTURES = 2;
+
+    union {
+        struct
+        {
+            GLuint fbo1;
+            GLuint fbo2;
+        };
+
+        GLuint fbos[MAX_FBOS] = {};
+    };
+
+    union {
+        struct
+        {
+            GLuint colorTexture;
+            GLuint depthTexture;
+        };
+
+        GLuint textures[MAX_TEXTURES] = {};
+    };
 };
