@@ -30,7 +30,7 @@ float g_bumpMapScaleFactor = 0.00001f;
 uint32_t g_bumpMapAvailable = 0;
 uint32_t g_metallicMapAvailable = 0;
 uint32_t g_roughnessMapAvailable = 0;
-float g_lightPosition[3] = {0, 20, -45};
+float g_lightPosition[3] = {0, 100, -45};
 char const *g_disableEnableList[2] = {"Disabled", "Enabled"};
 enum class eRenderMode : uint32_t
 {

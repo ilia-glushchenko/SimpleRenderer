@@ -31,6 +31,10 @@ layout (location = 6) in vec2 inUv;
 layout (location = 0) out vec4 outColor;
 
 const float PI = 3.1415926535897932384626433832795;
+const vec3 SUN_LIGHT_COLOR = vec3(252.0 / 255.0, 212/ 255.0, 64 / 255.0); // Sun
+const vec3 POINT_LIGHT_COLOR = vec3(255.0 / 255.0, 209/ 255.0, 163 / 255.0); // 4000k
+const float MarbleIOR = 1.486f;
+const float AirIOR = 1.00029f;
 
 float nearest_neighbour_checkerboard_color(vec2 inUv)
 {
@@ -153,11 +157,14 @@ float FresnelSchlick(float F0, vec3 n, vec3 l)
     return F0 + (1 - F0) * pow((1 - max(0, dot(n, l))), 5);
 }
 
-vec3 CookTorance(vec3 ssAbledo, vec3 lightColor, vec3 v, vec3 n, vec3 l, float ro)
+float FresnelSchlick(vec3 v, vec3 l)
 {
-    float MarbleIOR = 1.486f;
-    float AirIOR = 1.00029f;
+    vec3 h = (l + v) / length(l + v);
+    return FresnelSchlick(FresnelSchlickF0(AirIOR, MarbleIOR), h, l);
+}
 
+float CookTorance(vec3 v, vec3 n, vec3 l, float ro)
+{
     vec3 h = (l + v) / length(l + v);
 
     float D = BeckmannNDF(n, h, ro);
@@ -168,9 +175,12 @@ vec3 CookTorance(vec3 ssAbledo, vec3 lightColor, vec3 v, vec3 n, vec3 l, float r
     );
     float F = FresnelSchlick(FresnelSchlickF0(AirIOR, MarbleIOR), h, l);
 
-    float fSpec = (F * G2 * D) / (4 * abs(dot(n, l)) * abs(dot(n, v)));
+    return (F * G2 * D) / (4 * abs(dot(n, l)) * abs(dot(n, v)));
+}
 
-    return (1 - F)*ssAbledo / PI + PI * fSpec * lightColor * max(dot(n, l), 0);
+float LightFalloffWindowingFunction(float r0, float rMin, float rMax, float r)
+{
+    return pow(r0 / max(r, rMin), 2) * pow(max(1 - pow(r / rMax, 4), 0), 2);
 }
 
 void main()
@@ -194,25 +204,29 @@ void main()
             uv = uv + h * (TBN * view.xyz).xy * uBumpMapScaleFactorFloat;
         }
 
-        vec3 color = texture(uAlbedoMapSampler2D, uv).rgb;
+        vec3 ssAlbedo = texture(uAlbedoMapSampler2D, uv).rgb;
         vec3 normal = normalize((texture(uNormalMapSampler2D, uv).xyz * 2) - 1);
         normal = normalize(n + TBN * normal);
         float ro = bool(uRoughnessMapAvailableUint) ? texture(uRoughnessSampler2D, uv).r : 1;
 
-        vec3 endColor = vec3(0);
-        vec3 sunColor = vec3(252.0 / 255.0, 212/ 255.0, 64 / 255.0); // Sun
-        float i = 1;
-        if (bool(uShadowMappingEnabledUint) && abs(shadowPosMVP.z) > depth - 0.45f)
+        float fSpecDL = 0;
+        if (bool(uShadowMappingEnabledUint) && abs(shadowPosMVP.z) < depth - 0.45f)
         {
-            i = 0.5f;
-            //endColor = CookTorance(color, sunColor, view, normal, directionalLightDir, ro);
+            fSpecDL = CookTorance(view, normal, directionalLightDir, ro);
         }
 
         float d = distance(uPointLightPos, positionWorld.xyz / positionWorld.w);
-
-        vec3 lightColor = vec3(255.0 / 255.0, 209/ 255.0, 163 / 255.0); // 4000k
         vec3 pointLightDir = -normalize(positionWorld.xyz / positionWorld.w - uPointLightPos);
-        outColor = vec4(endColor + i * CookTorance(color, lightColor, view, normal, pointLightDir, ro), 1);
+
+        float fSpecPL = CookTorance(view, normal, pointLightDir, ro);
+        outColor = vec4(
+            //LightFalloffWindowingFunction(300, 1, 900, d) *
+            (1 - FresnelSchlick(view, pointLightDir)
+                 //- FresnelSchlick(view, directionalLightDir)
+                ) * ssAlbedo / PI
+            + PI * fSpecPL * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0)
+            //+ PI * fSpecDL * SUN_LIGHT_COLOR * max(dot(n, directionalLightDir), 0)
+            , 1);
     }
     else if (uRenderModeUint == 1) // Normal
     {
