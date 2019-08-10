@@ -33,6 +33,7 @@ layout (location = 0) out vec4 outColor;
 const float PI = 3.1415926535897932384626433832795;
 const vec3 SUN_LIGHT_COLOR = vec3(252.0 / 255.0, 212/ 255.0, 64 / 255.0); // Sun
 const vec3 POINT_LIGHT_COLOR = vec3(255.0 / 255.0, 209/ 255.0, 163 / 255.0); // 4000k
+const float SilkIOR = 1.5605f;
 const float MarbleIOR = 1.486f;
 const float AirIOR = 1.00029f;
 
@@ -225,7 +226,7 @@ void main()
                  //- FresnelSchlick(view, directionalLightDir)
                 ) * ssAlbedo / PI
             + PI * fSpecPL * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0)
-            //+ PI * fSpecDL * SUN_LIGHT_COLOR * max(dot(n, directionalLightDir), 0)
+            + PI * fSpecDL * SUN_LIGHT_COLOR * max(dot(n, directionalLightDir), 0)
             , 1);
     }
     else if (uRenderModeUint == 1) // Normal

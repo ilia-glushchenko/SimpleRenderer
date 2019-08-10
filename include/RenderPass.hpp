@@ -7,75 +7,210 @@
 
 #include <RendererDefinitions.hpp>
 
+RenderPass CreateRenderPass(SubPassDescriptor const *desc, uint8_t count, ShaderProgram program, int32_t width, int32_t height)
+{
+    assert(desc != nullptr);
+    assert(count < RENDER_PASS_MAX_SUBPASS);
+
+    RenderPass pass;
+    pass.program = program;
+    pass.subPassCount = count;
+    pass.width = width;
+    pass.height = height;
+
+    GLuint fbos[RENDER_PASS_MAX_SUBPASS] = {};
+    glGenFramebuffers(pass.subPassCount, fbos);
+
+    for (uint8_t i = 0; i < pass.subPassCount; ++i)
+    {
+        SubPass &subPass = pass.subPasses[i];
+        subPass.fbo = fbos[i];
+        subPass.active = true;
+        subPass.desc = desc[i];
+
+        glBindFramebuffer(GL_FRAMEBUFFER, subPass.fbo);
+        {
+            GLenum drawBuffers[RENDER_PASS_MAX_ATTACHMENTS] = {};
+            uint8_t drawBufferCount = 0;
+
+            for (uint8_t j = 0; j < subPass.desc.attachmentCount; ++j)
+            {
+                auto const &attachment = subPass.desc.attachments[j];
+
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(attachment.texture, attachment.handle);
+                glFramebufferTexture2D(GL_FRAMEBUFFER, attachment.attachment, attachment.texture, attachment.handle, 0);
+
+                if (attachment.attachment >= GL_COLOR_ATTACHMENT0 && attachment.attachment <= GL_COLOR_ATTACHMENT31)
+                {
+                    drawBuffers[drawBufferCount++] = attachment.attachment;
+                }
+            }
+
+            glDrawBuffers(drawBufferCount, drawBuffers);
+
+            if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            {
+                std::cerr << "Error! Failed to create SubPass! FrameBuffer is not complete!" << std::endl;
+            }
+        }
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    }
+
+    return pass;
+}
+
 void DeleteRenderPass(RenderPass &pass)
 {
     DeleteShaderProgram(pass.program);
-    glDeleteFramebuffers(RenderPass::MAX_FBOS, pass.fbos);
-    for (uint32_t i = 0; i < RenderPass::MAX_TEXTURES; ++i)
+    for (uint8_t i = 0; i < pass.subPassCount; ++i)
     {
-        glDeleteTextures(2, pass.textures);
+        glDeleteFramebuffers(1, &(pass.subPasses[i].fbo));
     }
+}
+
+Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, int32_t height)
+{
+    Pipeline pipeline;
+
+    {
+        SubPassDescriptor desc;
+        desc.attachmentCount = 1;
+        desc.attachments[0] = SubPassAttachmentDescriptor{
+            GL_DEPTH_ATTACHMENT,
+            GL_TEXTURE_2D,
+            CreateDepthTexture(4096, 4096)};
+
+        pipeline.shadowMapping = CreateRenderPass(&desc, 1, programs.shadowMapping, 4096, 4096);
+    }
+
+    {
+        SubPassDescriptor desc;
+        desc.dependencyCount = 1;
+        desc.dependencies[0] = SubPassDependencyDescriptor{
+            GL_TEXTURE0,
+            GL_TEXTURE_2D,
+            pipeline.shadowMapping.subPasses[0].desc.attachments[0].handle};
+        desc.attachmentCount = 2;
+        desc.attachments[0] = SubPassAttachmentDescriptor{
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateEmptyRGBATexture(width, height)};
+        desc.attachments[1] = SubPassAttachmentDescriptor{
+            GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, CreateDepthTexture(width, height)};
+
+        pipeline.lighting = CreateRenderPass(&desc, 1, programs.lighting, width, height);
+    }
+
+    {
+        auto const texture1 = CreateEmptyRGBATexture(width, height);
+        auto const texture2 = CreateEmptyRGBATexture(width, height);
+
+        SubPassDescriptor desc[2];
+
+        desc[0].dependencyCount = 3;
+        desc[0].dependencies[0] = SubPassDependencyDescriptor{
+            GL_TEXTURE0, GL_TEXTURE_2D, pipeline.lighting.subPasses[0].desc.attachments[0].handle};
+        desc[0].dependencies[1] = SubPassDependencyDescriptor{
+            GL_TEXTURE1, GL_TEXTURE_2D, pipeline.lighting.subPasses[0].desc.attachments[1].handle};
+        desc[0].dependencies[2] = SubPassDependencyDescriptor{
+            GL_TEXTURE2, GL_TEXTURE_2D, texture2};
+        desc[0].attachmentCount = 1;
+        desc[0].attachments[0] = SubPassAttachmentDescriptor{
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture1};
+
+        desc[1].dependencyCount = 3;
+        desc[1].dependencies[0] = SubPassDependencyDescriptor{
+            GL_TEXTURE0, GL_TEXTURE_2D, pipeline.lighting.subPasses[0].desc.attachments[0].handle};
+        desc[1].dependencies[1] = SubPassDependencyDescriptor{
+            GL_TEXTURE1, GL_TEXTURE_2D, pipeline.lighting.subPasses[0].desc.attachments[1].handle};
+        desc[1].dependencies[2] = SubPassDependencyDescriptor{
+            GL_TEXTURE2, GL_TEXTURE_2D, texture1};
+        desc[1].attachmentCount = 1;
+        desc[1].attachments[0] = SubPassAttachmentDescriptor{GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture2};
+
+        pipeline.taa = CreateRenderPass(desc, 2, programs.taa, width, height);
+        pipeline.taa.subPasses[1].active = false;
+    }
+
+    {
+        SubPassDescriptor desc;
+        desc.dependencyCount = 4;
+        desc.dependencies[0] = SubPassDependencyDescriptor{
+            GL_TEXTURE0,
+            GL_TEXTURE_2D,
+            pipeline.lighting.subPasses[0].desc.attachments[0].handle};
+        desc.dependencies[1] = SubPassDependencyDescriptor{
+            GL_TEXTURE1,
+            GL_TEXTURE_2D,
+            pipeline.lighting.subPasses[0].desc.attachments[1].handle};
+        desc.dependencies[2] = SubPassDependencyDescriptor{
+            GL_TEXTURE2,
+            GL_TEXTURE_2D,
+            pipeline.taa.subPasses[1].desc.attachments[0].handle};
+        desc.dependencies[3] = SubPassDependencyDescriptor{
+            GL_TEXTURE3,
+            GL_TEXTURE_2D,
+            pipeline.taa.subPasses[0].desc.attachments[0].handle};
+        desc.attachmentCount = 1;
+        desc.attachments[0] = SubPassAttachmentDescriptor{
+            GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_2D,
+            CreateEmptyRGBATexture(width, height)};
+
+        pipeline.debug = CreateRenderPass(&desc, 1, programs.debug, width, height);
+    }
+
+    return pipeline;
 }
 
 void UpdateGlobalUniforms(ShaderProgram const &program)
 {
-    for (auto &uniform : program.unifromsui32)
+    for (auto &uniform : program.ui32)
     {
         glUniform1ui(uniform.location, *uniform.data);
     }
-    for (auto &uniform : program.uniformsf)
+    for (auto &uniform : program.f1)
     {
         glUniform1f(uniform.location, *uniform.data);
     }
-    for (auto &uniform : program.uniforms3f)
+    for (auto &uniform : program.f3)
     {
         glUniform3fv(uniform.location, 1, uniform.data);
     }
-    for (auto &uniform : program.uniforms16f)
+    for (auto &uniform : program.f16)
     {
         glUniformMatrix4fv(uniform.location, 1, GL_TRUE, uniform.data);
     }
 }
 
-uint32_t BindDrawModelDependencies(RenderModel const &model)
+void UpdateLocalUniforms(ShaderProgram const &program, uint64_t index)
 {
-    uint32_t bound = 0;
-
-    if (model.albedoTexture != 0)
+    for (auto &uniform : program.ui32Array)
     {
-        bound++;
-        glActiveTexture(GL_TEXTURE0 + 1);
-        glBindTexture(GL_TEXTURE_2D, model.albedoTexture);
+        uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
+        data = data + uniform.offset + uniform.stride * index;
+        glUniform1ui(uniform.location, *reinterpret_cast<uint32_t const *>(data));
     }
-    if (model.normalTexture != 0)
+    for (auto &uniform : program.f1Array)
     {
-        bound++;
-        glActiveTexture(GL_TEXTURE0 + 2);
-        glBindTexture(GL_TEXTURE_2D, model.normalTexture);
+        uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
+        data = data + uniform.offset + uniform.stride * index;
+        glUniform1f(uniform.location, *reinterpret_cast<float const *>(data));
     }
-    if (model.bumpTexture != 0)
+    for (auto &uniform : program.f3Array)
     {
-        bound++;
-        glActiveTexture(GL_TEXTURE0 + 3);
-        glBindTexture(GL_TEXTURE_2D, model.bumpTexture);
+        uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
+        data = data + uniform.offset + uniform.stride * index;
+        glUniform3fv(uniform.location, 1, reinterpret_cast<float const *>(data));
     }
-    if (model.metallicTexture != 0)
+    for (auto &uniform : program.f16Array)
     {
-        bound++;
-        glActiveTexture(GL_TEXTURE0 + 4);
-        glBindTexture(GL_TEXTURE_2D, model.metallicTexture);
+        uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
+        data = data + uniform.offset + uniform.stride * index;
+        glUniformMatrix4fv(uniform.location, 1, GL_TRUE, reinterpret_cast<float const *>(data));
     }
-    if (model.roughnessTexture != 0)
-    {
-        bound++;
-        glActiveTexture(GL_TEXTURE0 + 5);
-        glBindTexture(GL_TEXTURE_2D, model.roughnessTexture);
-    }
-
-    return bound;
 }
 
-void BindRenderPassDependencies(GLuint const (&dependencies)[RenderPass::MAX_DEPENDENCIES], uint32_t count)
+void BindRenderPassDependencies(GLuint const (&dependencies)[RENDER_PASS_MAX_DEPENDENCIES], uint32_t count)
 {
     for (uint32_t i = 0; i < count; ++i)
     {
@@ -84,48 +219,134 @@ void BindRenderPassDependencies(GLuint const (&dependencies)[RenderPass::MAX_DEP
     }
 }
 
+void BindRenderPassDependencies(SubPassDependencyDescriptor const (&dependencies)[RENDER_PASS_MAX_DEPENDENCIES], uint8_t count)
+{
+    for (uint8_t i = 0; i < count; ++i)
+    {
+        glActiveTexture(dependencies[i].unit);
+        glBindTexture(dependencies[i].texture, dependencies[i].handle);
+    }
+}
+
+void UnbindRenderPassDependencies(SubPassDependencyDescriptor const (&dependencies)[RENDER_PASS_MAX_DEPENDENCIES], uint8_t count)
+{
+    for (uint8_t i = 0; i < count; ++i)
+    {
+        glActiveTexture(dependencies[i].unit);
+        glBindTexture(dependencies[i].texture, 0);
+    }
+}
+
+void BindRenderModelTextures(RenderModel const &model, uint32_t bindingOffset)
+{
+    if (model.albedoTexture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0 + bindingOffset + 0);
+        glBindTexture(GL_TEXTURE_2D, model.albedoTexture);
+    }
+    if (model.normalTexture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0 + bindingOffset + 1);
+        glBindTexture(GL_TEXTURE_2D, model.normalTexture);
+    }
+    if (model.bumpTexture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0 + bindingOffset + 2);
+        glBindTexture(GL_TEXTURE_2D, model.bumpTexture);
+    }
+    if (model.metallicTexture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0 + bindingOffset + 3);
+        glBindTexture(GL_TEXTURE_2D, model.metallicTexture);
+    }
+    if (model.roughnessTexture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0 + bindingOffset + 4);
+        glBindTexture(GL_TEXTURE_2D, model.roughnessTexture);
+    }
+}
+
+void UnbindRenderModelTextures(RenderModel const &model, uint32_t bindingOffset)
+{
+    if (model.albedoTexture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0 + bindingOffset + 0);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    if (model.normalTexture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0 + bindingOffset + 1);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    if (model.bumpTexture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0 + bindingOffset + 2);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    if (model.metallicTexture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0 + bindingOffset + 3);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+    if (model.roughnessTexture != 0)
+    {
+        glActiveTexture(GL_TEXTURE0 + bindingOffset + 4);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+}
+
 void DrawModel(RenderModel const &model)
 {
     glBindVertexArray(model.vertexArrayObject);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, model.indexBuffer);
     glDrawElements(GL_TRIANGLES, model.indexCount, GL_UNSIGNED_INT, nullptr);
 }
 
-void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint32_t modelCount)
+void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64_t modelCount)
 {
-    glBindFramebuffer(GL_FRAMEBUFFER, pass.fbo1);
+    for (uint8_t i = 0; i < pass.subPassCount; ++i)
     {
-        glUseProgram(pass.program.handle);
-
-        glViewport(0, 0, pass.width, pass.height);
-        glScissor(0, 0, pass.width, pass.height);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        UpdateGlobalUniforms(pass.program);
-        BindRenderPassDependencies(pass.dependencies, pass.dependencyCount);
-
-        for (uint32_t i = 0; i < modelCount; ++i)
+        if (pass.subPasses[i].active)
         {
-            DrawModel(models[i]);
+            glBindFramebuffer(GL_FRAMEBUFFER, pass.subPasses[i].fbo);
+            {
+                glUseProgram(pass.program.handle);
+
+                glViewport(0, 0, pass.width, pass.height);
+                glScissor(0, 0, pass.width, pass.height);
+                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+                UpdateGlobalUniforms(pass.program);
+                BindRenderPassDependencies(pass.subPasses[i].desc.dependencies, pass.subPasses[i].desc.dependencyCount);
+
+                for (uint64_t j = 0; j < modelCount; ++j)
+                {
+                    UpdateLocalUniforms(pass.program, j);
+                    BindRenderModelTextures(models[j], pass.subPasses[i].desc.dependencyCount);
+                    DrawModel(models[j]);
+                    UnbindRenderModelTextures(models[j], pass.subPasses[i].desc.dependencyCount);
+                }
+
+                UnbindRenderPassDependencies(pass.subPasses[i].desc.dependencies, pass.subPasses[i].desc.dependencyCount);
+            }
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void ExectureBackBufferBlitRenderPass(RenderPass const &lastPass, GLenum attachment)
+void ExecuteBackBufferBlitRenderPass(GLuint fbo, GLenum attachment, int32_t width, int32_t height)
 {
-    glBindFramebuffer(GL_READ_FRAMEBUFFER, lastPass.fbo1);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
     {
         glReadBuffer(attachment);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
-        glViewport(0, 0, lastPass.width, lastPass.height);
-        glScissor(0, 0, lastPass.width, lastPass.height);
+        glViewport(0, 0, width, height);
+        glScissor(0, 0, width, height);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glBlitFramebuffer(
-            0, 0, lastPass.width, lastPass.height,
-            0, 0, lastPass.width, lastPass.height,
+            0, 0, width, height,
+            0, 0, width, height,
             GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

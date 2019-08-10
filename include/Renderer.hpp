@@ -30,9 +30,12 @@ MessageCallback(GLenum source,
                 const GLchar *message,
                 const void *userParam)
 {
-    fprintf(stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n\n",
-            (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""),
-            type, severity, message);
+    if (type != GL_DEBUG_TYPE_OTHER)
+    {
+        fprintf(stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n\n",
+                (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""),
+                type, severity, message);
+    }
 }
 
 GLuint CreateShader(GLenum shaderType, const char *code)
@@ -125,7 +128,7 @@ std::vector<uint32_t> CreateBuffers(std::vector<BufferDescriptor> const &bufferD
     {
         vbos.push_back(CreateBuffer());
         glBindBuffer(GL_ARRAY_BUFFER, vbos.back());
-        glBufferData(GL_ARRAY_BUFFER, desc.count * desc.size, desc.data, GL_STATIC_DRAW);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<size_t>(desc.count * desc.size), desc.data, GL_STATIC_DRAW);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
     }
 
@@ -133,34 +136,63 @@ std::vector<uint32_t> CreateBuffers(std::vector<BufferDescriptor> const &bufferD
 }
 
 template <typename T, typename D>
-std::vector<T> GetUniformLocations(GLuint program, std::vector<D *> const &data, std::vector<std::string> const &names)
+std::vector<T> CreateUniformBinding(GLuint program, std::vector<D *> const &data, std::vector<const char *> const &names)
 {
     assert(data.size() == names.size());
 
-    std::vector<T> uniforms;
+    std::vector<T> bindings;
 
     for (uint32_t i = 0; i < names.size(); ++i)
     {
-        uniforms.push_back({names[i],
-                            glGetUniformLocation(program, names[i].c_str()),
-                            data[i]});
+        bindings.push_back({static_cast<int32_t>(glGetUniformLocation(program, names[i])), data[i]});
 
-        if (uniforms.back().location == -1)
+        if (bindings.back().location == -1)
         {
             std::cerr << "Failed to get uniform location! index: " << i << "; name: '" << names[i] << "'" << std::endl;
         }
     }
 
-    return uniforms;
+    return bindings;
 }
+
+template <typename T, typename D>
+std::vector<T> CreateUniformBinding(
+    GLuint program,
+    std::vector<D *> const &data,
+    std::vector<const char *> const &names,
+    std::vector<uint32_t> const &offsets,
+    std::vector<uint32_t> const &strides)
+{
+    assert(data.size() == names.size());
+
+    std::vector<T> bindings;
+
+    for (uint32_t i = 0; i < names.size(); ++i)
+    {
+        bindings.push_back({glGetUniformLocation(program, names[i]),
+                            data[i],
+                            offsets[i],
+                            strides[i]});
+
+        if (bindings.back().location == -1)
+        {
+            std::cerr << "Failed to get uniform location! index: " << i << "; name: '" << names[i] << "'" << std::endl;
+        }
+    }
+
+    return bindings;
+}
+
 } // namespace
 
-ShaderProgram CreateShaderProgram(char const *vert, char const *frag, UniformsDescriptor const &uniformsDescriptor)
+ShaderProgram CreateShaderProgram(char const *vert, char const *frag)
 {
-    auto const vertexShaderHandle = ::CreateShader(GL_VERTEX_SHADER, sr::load::LoadFile(vert).c_str());
-    auto const fragmentShaderHandle = ::CreateShader(GL_FRAGMENT_SHADER, sr::load::LoadFile(frag).c_str());
-    auto const program = CreateShaderProgram(vertexShaderHandle, fragmentShaderHandle);
-    if (program != 0)
+    ShaderProgram program;
+
+    program.vertexShaderHandle = ::CreateShader(GL_VERTEX_SHADER, sr::load::LoadFile(vert).c_str());
+    program.fragmentShaderHandle = ::CreateShader(GL_FRAGMENT_SHADER, sr::load::LoadFile(frag).c_str());
+    program.handle = CreateShaderProgram(program.vertexShaderHandle, program.fragmentShaderHandle);
+    if (program.handle != 0)
     {
         std::time_t const timestamp = std::time(nullptr);
         std::cout << "Shader program created:\n"
@@ -169,14 +201,19 @@ ShaderProgram CreateShaderProgram(char const *vert, char const *frag, UniformsDe
                   << std::asctime(std::localtime(&timestamp)) << std::endl;
     }
 
-    return ShaderProgram{
-        GetUniformLocations<UniformUi32>(program, uniformsDescriptor.ui32.data, uniformsDescriptor.ui32.names),
-        GetUniformLocations<Uniformf>(program, uniformsDescriptor.float1.data, uniformsDescriptor.float1.names),
-        GetUniformLocations<UniformV3f>(program, uniformsDescriptor.float3.data, uniformsDescriptor.float3.names),
-        GetUniformLocations<UniformM4f>(program, uniformsDescriptor.mat4.data, uniformsDescriptor.mat4.names),
-        vertexShaderHandle,
-        fragmentShaderHandle,
-        program};
+    return program;
+}
+
+void CreateShaderProgramUniformBindings(ShaderProgram &program, UniformsDescriptor const &desc)
+{
+    program.ui32 = CreateUniformBinding<UniformBindingUI32>(program.handle, desc.ui32.data, desc.ui32.names);
+    program.f1 = CreateUniformBinding<UniformBindingF1>(program.handle, desc.float1.data, desc.float1.names);
+    program.f3 = CreateUniformBinding<UniformBindingV3F>(program.handle, desc.float3.data, desc.float3.names);
+    program.f16 = CreateUniformBinding<UniformBindingM4F>(program.handle, desc.mat4.data, desc.mat4.names);
+    program.ui32Array = CreateUniformBinding<UniformBindingUI32Array>(program.handle, desc.ui32Array.data, desc.ui32Array.names, desc.ui32Array.offsets, desc.ui32Array.strides);
+    program.f1Array = CreateUniformBinding<UniformBindingF1Array>(program.handle, desc.float1Array.data, desc.float1Array.names, desc.float1Array.offsets, desc.float1Array.strides);
+    program.f3Array = CreateUniformBinding<UniformBindingV3FArray>(program.handle, desc.float3Array.data, desc.float3Array.names, desc.float3Array.offsets, desc.float3Array.strides);
+    program.f16Array = CreateUniformBinding<UniformBindingM4FArray>(program.handle, desc.mat4Array.data, desc.mat4Array.names, desc.mat4Array.offsets, desc.mat4Array.strides);
 }
 
 void DeleteShaderProgram(ShaderProgram &program)
@@ -303,6 +340,11 @@ GLuint CreateDepthTexture(uint32_t width, uint32_t height)
     return depthTexture;
 }
 
+GLuint CreateEmptyRGBATexture(int32_t width, int32_t height)
+{
+    return CreateTexture(sr::load::TextureSource{"", nullptr, width, height, 4, GL_RGBA});
+}
+
 void DeleteTexture(GLuint texture)
 {
     glDeleteTextures(1, &texture);
@@ -370,23 +412,6 @@ void LinkRenderModelToShaderProgram(
     }
 }
 
-TAABuffer CreateTAABuffer(int32_t width, int32_t height)
-{
-    sr::load::TextureSource const source{"", nullptr, width, height, 4, GL_RGBA};
-
-    TAABuffer taaBuffer;
-    taaBuffer.count = 0;
-    CreateTextures(source, CreateDefaultTexture2DDescriptor(source), taaBuffer.textures, 2);
-
-    return taaBuffer;
-}
-
-void DeleteTAABuffer(TAABuffer &buffer)
-{
-    DeleteTextures(1, &buffer.historyTexture);
-    DeleteTextures(1, &buffer.drawTexture);
-}
-
 GLFWwindow *InitializeGLFW(uint32_t width, uint32_t height)
 {
     if (!glfwInit())
@@ -428,7 +453,7 @@ void InitializeImGui(GLFWwindow *window)
 
 void ConfigureGL()
 {
-    //glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT);
     glDebugMessageCallback(::MessageCallback, 0);
     glClearColor(1, 1, 1, 1);
     glClearDepth(1.0f);

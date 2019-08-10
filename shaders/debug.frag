@@ -20,5 +20,5 @@ void main()
     outColor = distance(lightingColor, taaColor) > 0.1f
         ? vec4(1, 0, 0, 1) : vec4(0, 1, 0.5, 1);
 
-    outColor = texture(uTaaDrawTextureSampler2D, uv).rgba;
+    outColor = vec4(texture(uTaaDrawTextureSampler2D, uv).rgb, 1);
 }

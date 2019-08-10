@@ -9,21 +9,37 @@
 #include <glbinding/gl46/gl.h>
 using namespace gl;
 
-struct UniformUi32
+struct UniformBindingUI32
 {
-    std::string name;
     int32_t location = -1;
-    uint32_t *data = nullptr;
+    uint32_t const *data = nullptr;
 };
 
-struct Uniformf
+struct UniformBindingF1
 {
-    std::string name;
     int32_t location = -1;
-    float *data = nullptr;
+    float const *data = nullptr;
 };
-using UniformV3f = Uniformf;
-using UniformM4f = Uniformf;
+using UniformBindingV3F = UniformBindingF1;
+using UniformBindingM4F = UniformBindingF1;
+
+struct UniformBindingUI32Array
+{
+    int32_t location = -1;
+    uint32_t const *data = nullptr;
+    uint32_t offset = 0;
+    uint32_t stride = 0;
+};
+
+struct UniformBindingF1Array
+{
+    int32_t location = -1;
+    float const *data = nullptr;
+    uint32_t offset = 0;
+    uint32_t stride = 0;
+};
+using UniformBindingV3FArray = UniformBindingF1Array;
+using UniformBindingM4FArray = UniformBindingF1Array;
 
 struct UniformTexture2D
 {
@@ -66,10 +82,16 @@ struct RenderModel
 
 struct ShaderProgram
 {
-    std::vector<UniformUi32> unifromsui32;
-    std::vector<Uniformf> uniformsf;
-    std::vector<UniformV3f> uniforms3f;
-    std::vector<UniformM4f> uniforms16f;
+    std::vector<UniformBindingUI32> ui32;
+    std::vector<UniformBindingF1> f1;
+    std::vector<UniformBindingV3F> f3;
+    std::vector<UniformBindingM4F> f16;
+
+    std::vector<UniformBindingUI32Array> ui32Array;
+    std::vector<UniformBindingF1Array> f1Array;
+    std::vector<UniformBindingV3FArray> f3Array;
+    std::vector<UniformBindingM4FArray> f16Array;
+
     GLuint vertexShaderHandle = 0;
     GLuint fragmentShaderHandle = 0;
     GLuint handle = 0;
@@ -89,31 +111,42 @@ struct AttributeDescriptor
     uint32_t stride = 0;
 };
 
+template <typename T>
+struct GlobalUniformDescriptor
+{
+    std::vector<const char *> names;
+    std::vector<T const *> data;
+};
+
+template <typename T>
+struct LocalUniformDescriptor
+{
+    std::vector<const char *> names;
+    std::vector<T const *> data;
+    std::vector<uint32_t> offsets;
+    std::vector<uint32_t> strides;
+};
+
 struct UniformsDescriptor
 {
-    struct UINT32
-    {
-        std::vector<std::string> names;
-        std::vector<uint32_t *> data;
-    } ui32;
+    using UI32 = GlobalUniformDescriptor<uint32_t>;
+    using FLOA1 = GlobalUniformDescriptor<float>;
+    using FLOAT3 = GlobalUniformDescriptor<float>;
+    using MAT4 = GlobalUniformDescriptor<float>;
+    using UI32_ARRAY = GlobalUniformDescriptor<uint32_t>;
+    using FLOA1_ARRAY = GlobalUniformDescriptor<float>;
+    using FLOAT3_ARRAY = GlobalUniformDescriptor<float>;
+    using MAT4_ARRAY = GlobalUniformDescriptor<float>;
 
-    struct FLOAT
-    {
-        std::vector<std::string> names;
-        std::vector<float *> data;
-    } float1;
+    GlobalUniformDescriptor<uint32_t> ui32;
+    GlobalUniformDescriptor<float> float1;
+    GlobalUniformDescriptor<float> float3;
+    GlobalUniformDescriptor<float> mat4;
 
-    struct FLOAT3
-    {
-        std::vector<std::string> names;
-        std::vector<float *> data;
-    } float3;
-
-    struct MAT4
-    {
-        std::vector<std::string> names;
-        std::vector<float *> data;
-    } mat4;
+    LocalUniformDescriptor<uint32_t> ui32Array;
+    LocalUniformDescriptor<float> float1Array;
+    LocalUniformDescriptor<float> float3Array;
+    LocalUniformDescriptor<float> mat4Array;
 };
 
 struct Texture2DDescriptor
@@ -132,52 +165,63 @@ struct TAABuffer
     sr::math::Matrix4x4 prevView = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 prevProj = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 jitter = sr::math::CreateIdentityMatrix();
-
-    union {
-        struct
-        {
-            GLuint drawTexture;
-            GLuint historyTexture;
-        };
-
-        GLuint textures[2] = {};
-    };
-
     uint32_t count = 0;
+};
+
+static const uint8_t RENDER_PASS_MAX_SUBPASS = 4;
+static const uint8_t RENDER_PASS_MAX_DEPENDENCIES = 8;
+static const uint8_t RENDER_PASS_MAX_ATTACHMENTS = 8;
+
+struct SubPassDependencyDescriptor
+{
+    GLenum unit;
+    GLenum texture;
+    GLuint handle;
+};
+
+struct SubPassAttachmentDescriptor
+{
+    GLenum attachment;
+    GLenum texture;
+    GLuint handle;
+};
+
+struct SubPassDescriptor
+{
+    SubPassDependencyDescriptor dependencies[RENDER_PASS_MAX_DEPENDENCIES] = {};
+    uint8_t dependencyCount = 0;
+    SubPassAttachmentDescriptor attachments[RENDER_PASS_MAX_ATTACHMENTS] = {};
+    uint8_t attachmentCount = 0;
+};
+
+struct SubPass
+{
+    SubPassDescriptor desc;
+    GLuint fbo = 0;
+    bool active = false;
 };
 
 struct RenderPass
 {
+    SubPass subPasses[RENDER_PASS_MAX_SUBPASS] = {};
+    uint8_t subPassCount = 0;
     ShaderProgram program = {};
-
-    static const uint8_t MAX_DEPENDENCIES = 8;
-
-    GLuint dependencies[MAX_DEPENDENCIES] = {};
-    uint8_t dependencyCount = 0;
-
     int32_t width = 0;
     int32_t height = 0;
+};
 
-    const static uint32_t MAX_FBOS = 2;
-    const static uint32_t MAX_TEXTURES = 2;
+struct PipelineShaderPrograms
+{
+    ShaderProgram shadowMapping;
+    ShaderProgram lighting;
+    ShaderProgram taa;
+    ShaderProgram debug;
+};
 
-    union {
-        struct
-        {
-            GLuint fbo1;
-            GLuint fbo2;
-        };
-
-        GLuint fbos[MAX_FBOS] = {};
-    };
-
-    union {
-        struct
-        {
-            GLuint colorTexture;
-            GLuint depthTexture;
-        };
-
-        GLuint textures[MAX_TEXTURES] = {};
-    };
+struct Pipeline
+{
+    RenderPass shadowMapping;
+    RenderPass lighting;
+    RenderPass taa;
+    RenderPass debug;
 };
