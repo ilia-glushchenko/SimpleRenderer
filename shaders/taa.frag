@@ -63,16 +63,63 @@ vec2 ReverseReprojectUV(vec2 currentUV)
     return fragUV;
 }
 
+vec3 SampleLocalMinima(vec2 currentUV)
+{
+    ivec2 wh = textureSize(uColorTextureSampler2D, 0);
+
+    float uTex = currentUV.x * wh.x;
+    float vTex = currentUV.y * wh.y;
+
+    vec4 minima = min(
+        texture(uColorTextureSampler2D, currentUV),
+        min(texture(uColorTextureSampler2D, vec2((uTex + 1) / wh.x, vTex / wh.y)),
+            min(texture(uColorTextureSampler2D, vec2((uTex - 1) / wh.x, vTex / wh.y)),
+                min(texture(uColorTextureSampler2D, vec2(uTex / wh.x, (vTex + 1) / wh.y)),
+                    texture(uColorTextureSampler2D, vec2(uTex / wh.x, (vTex - 1) / wh.y))
+                )
+            )
+        )
+    );
+
+    return minima.xyz;
+}
+
+vec3 SampleLocalMaxima(vec2 currentUV)
+{
+    ivec2 wh = textureSize(uColorTextureSampler2D, 0);
+
+    float uTex = currentUV.x * wh.x;
+    float vTex = currentUV.y * wh.y;
+
+    vec4 maxima = max(
+        texture(uColorTextureSampler2D, currentUV),
+        max(texture(uColorTextureSampler2D, vec2((uTex + 1) / wh.x, vTex / wh.y)),
+            max(texture(uColorTextureSampler2D, vec2((uTex - 1) / wh.x, vTex / wh.y)),
+                max(texture(uColorTextureSampler2D, vec2(uTex / wh.x, (vTex + 1) / wh.y)),
+                    texture(uColorTextureSampler2D, vec2(uTex / wh.x, (vTex - 1) / wh.y))
+                )
+            )
+        )
+    );
+
+    return maxima.xyz;
+}
+
 void main()
 {
     if (uFrameCountUint >= 2)
     {
         vec2 jitter = vec2(uJitterMat[0].z, uJitterMat[1].z);
         vec2 reprojectedUV = ReverseReprojectUV(uv);
-        vec3 prevColor = texture(uHistoryTextureSampler2D, reprojectedUV).rgb;
         vec3 color = texture(uColorTextureSampler2D, uv - jitter).rgb;
 
-        outColor = vec4(mix(prevColor, color, 1.0/16.0), 1);
+        vec3 minima = SampleLocalMinima(uv - jitter);
+        vec3 maxima = SampleLocalMaxima(uv - jitter);
+
+        vec3 history = texture(uHistoryTextureSampler2D, reprojectedUV).rgb;
+        history = clamp(history, minima, maxima);
+
+        outColor = vec4(mix(history, color, 1.0/16.0), 1);
     }
     else
     {
