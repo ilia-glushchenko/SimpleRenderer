@@ -13,6 +13,7 @@ layout (location = 18) uniform uint  uFrameCountUint;
 layout (location = 20, binding = 0) uniform sampler2D uColorTextureSampler2D;
 layout (location = 21, binding = 1) uniform sampler2D uDepthTextureSampler2D;
 layout (location = 22, binding = 2) uniform sampler2D uHistoryTextureSampler2D;
+layout (location = 23, binding = 3) uniform sampler2D uVelocityTextureSampler2D;
 
 layout (location = 0) in vec3 position;
 layout (location = 1) in vec3 normal;

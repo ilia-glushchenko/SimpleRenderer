@@ -91,7 +91,16 @@ sr::load::Geometry g_quadWall =
         {0, 1, 2,
          0, 2, 3}};
 
-static std::vector<AttributeDescriptor> const g_defaultShaderProgramAttributes = {
+static std::vector<AttributeDescriptor> const g_shaderAttributesPosition = {
+    {"aPosition", 3, sizeof(sr::math::Vec3)},
+};
+
+static std::vector<AttributeDescriptor> const g_shaderAttributesPositionNormal = {
+    {"aPosition", 3, sizeof(sr::math::Vec3)},
+    {"aNormal", 3, sizeof(sr::math::Vec3)},
+};
+
+static std::vector<AttributeDescriptor> const g_shaderAttributesPositionNormalUV = {
     {"aPosition", 3, sizeof(sr::math::Vec3)},
     {"aNormal", 3, sizeof(sr::math::Vec3)},
     {"aUV", 2, sizeof(sr::math::Vec2)},

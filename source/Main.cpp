@@ -10,6 +10,8 @@
 #include "TestModels.hpp"
 
 #include <ctime>
+#include <chrono>
+#include <type_traits>
 
 Camera g_camera = CreateCamera();
 DirectionalLightSource g_directLight = {
@@ -61,21 +63,9 @@ char const *g_renderModesStr[static_cast<uint32_t>(eRenderMode::Count)] = {
 
 sr::math::Matrix4x4 CreateViewMatrix(sr::math::Vec3 pos, float yWorldAngle)
 {
-    sr::math::Matrix4x4 rotation = sr::math::CreateIdentityMatrix();
-
-    rotation._11 = std::cos(yWorldAngle);
-    rotation._13 = std::sin(yWorldAngle);
-    rotation._31 = -std::sin(yWorldAngle);
-    rotation._33 = std::cos(yWorldAngle);
-
-    rotation = sr::math::Transpose(rotation);
-
-    sr::math::Matrix4x4 translation = sr::math::CreateIdentityMatrix();
-    translation._14 = -pos.x;
-    translation._24 = -pos.y;
-    translation._34 = -pos.z;
-
-    return sr::math::Transpose(sr::math::Mul(rotation, translation));
+    return sr::math::Mul(
+        sr::math::CreateRotationMatrixY(-yWorldAngle),
+        sr::math::CreateTranslationMatrix(-pos.x, -pos.y, -pos.z));
 }
 
 void GLFWKeyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
@@ -210,26 +200,35 @@ std::vector<RenderModel> LoadModels(ShaderProgram const &program)
     std::vector<sr::load::Geometry> geometries;
     std::vector<sr::load::MaterialSource> materials;
 
-    //tinyobj::material_t material;
-    //material.diffuse_texname = "sexkaitb_8K_Albedo.jpg";
-    //material.normal_texname = "sexkaitb_8K_Normal.jpg";
-    //material.bump_texname = "sexkaitb_8K_Bump.jpg";
-    //material.roughness_texname = "sexkaitb_8K_Roughness.jpg";
-    //sr::load::LoadOBJ("data\\quad", "quad.obj", geometries, materials);
-    //models = { CreateRenderModel(attributes,
-    //                      sr::load::CreateBufferDescriptors(geometries.back()),
-    //                      sr::load::CreateIndexBufferDescriptor(geometries.back()),
-    //                      sr::load::CreateMaterialSource("data\\materials\\Brickwall_Worn_sexkaitb_8K_surface_ms", material))};
-    //g_camera.pos.z += 1;
-
     sr::load::LoadOBJ("data\\Sponza", "sponza.obj", geometries, materials);
     for (uint32_t i = 0; i < geometries.size(); ++i)
     {
-        models.push_back(CreateRenderModel(sr::load::CreateBufferDescriptors(geometries[i]),
-                                           sr::load::CreateIndexBufferDescriptor(geometries[i]),
-                                           materials[geometries[i].material]));
-        LinkRenderModelToShaderProgram(program.handle, models[i], g_defaultShaderProgramAttributes);
+        models.push_back(CreateRenderModel(
+            sr::load::CreateBufferDescriptors(geometries[i]),
+            sr::load::CreateIndexBufferDescriptor(geometries[i]),
+            materials[geometries[i].material]));
+        LinkRenderModelToShaderProgram(
+            program.handle, models[i], g_shaderAttributesPositionNormalUV);
     }
+
+    tinyobj::material_t material;
+    material.diffuse_texname = "sjggaija_8K_Albedo.jpg";
+    material.bump_texname = "sjggaija_8K_Bump.jpg";
+    material.normal_texname = "sjggaija_8K_Normal.jpg";
+    material.roughness_texname = "sjggaija_8K_Roughness.jpg";
+    sr::load::LoadOBJ("data\\quad", "quad.obj", geometries, materials);
+    models.push_back(CreateRenderModel(
+        sr::load::CreateBufferDescriptors(geometries.back()),
+        sr::load::CreateIndexBufferDescriptor(geometries.back()),
+        sr::load::CreateMaterialSource(
+            "data\\materials\\Rock_Cliffs_sjggaija_8K_surface_ms", material)));
+    LinkRenderModelToShaderProgram(
+        program.handle, models.back(), g_shaderAttributesPositionNormalUV);
+    models.back().model = sr::math::Mul(
+        sr::math::CreateTranslationMatrix(0, 50.f, 0),
+        sr::math::Mul(
+            sr::math::CreateScaleMatrix(100.f),
+            sr::math::CreateRotationMatrixY(6.28f * 0.65f)));
 
     for (auto &material : materials)
     {
@@ -245,12 +244,11 @@ PipelineShaderPrograms CreatePipelineShaderPrograms()
 
     desc.shadowMapping = CreateShaderProgram("shaders/shadow_mapping.vert", "shaders/shadow_mapping.frag");
     desc.lighting = CreateShaderProgram("shaders/lighting.vert", "shaders/lighting.frag");
-
+    desc.velocity = CreateShaderProgram("shaders/velocity.vert", "shaders/velocity.frag");
     desc.taa = CreateShaderProgram("shaders/taa.vert", "shaders/taa.frag");
-    LinkRenderModelToShaderProgram(desc.taa.handle, g_quadWallRenderModel, g_defaultShaderProgramAttributes);
-
+    LinkRenderModelToShaderProgram(desc.taa.handle, g_quadWallRenderModel, g_shaderAttributesPositionNormalUV);
     desc.debug = CreateShaderProgram("shaders/debug.vert", "shaders/debug.frag");
-    LinkRenderModelToShaderProgram(desc.debug.handle, g_quadWallRenderModel, g_defaultShaderProgramAttributes);
+    LinkRenderModelToShaderProgram(desc.debug.handle, g_quadWallRenderModel, g_shaderAttributesPositionNormalUV);
 
     return desc;
 }
@@ -264,13 +262,13 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                 {},
                 {},
                 {},
-                GlobalUniformDescriptor<float>{
+                UniformsDescriptor::MAT4{
                     {"uProjMat", "uViewMat"},
                     {g_directLight.projection.data, g_directLight.view.data}},
                 {},
                 {},
                 {},
-                LocalUniformDescriptor<float>{
+                UniformsDescriptor::ArrayMAT4{
                     {"uModelMat"},
                     {reinterpret_cast<float const *>(models.data())},
                     {offsetof(RenderModel, RenderModel::model)},
@@ -283,7 +281,7 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
             desc.lighting,
             UniformsDescriptor{
                 //uint32_t
-                GlobalUniformDescriptor<uint32_t>{
+                UniformsDescriptor::UI32{
                     {"uRenderModeUint",
                      "uShadowMappingEnabledUint",
                      "uBumpMappingEnabledUint"},
@@ -291,15 +289,15 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                      &g_shadowMapsMode,
                      &g_bumpMappingEnabled}},
                 //floats
-                GlobalUniformDescriptor<float>{
+                UniformsDescriptor::F1{
                     {"uBumpMapScaleFactorFloat"},
                     {&g_bumpMapScaleFactor}},
                 //float3
-                GlobalUniformDescriptor<float>{
+                UniformsDescriptor::F3{
                     {"uCameraPos", "uPointLightPos"},
                     {g_camera.pos.data, g_lightPosition}},
                 //mat4
-                GlobalUniformDescriptor<float>{
+                UniformsDescriptor::MAT4{
                     {"uProjMat",
                      "uViewMat",
                      "uJitterMat",
@@ -311,7 +309,7 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                      g_directLight.projection.data,
                      g_directLight.view.data}},
                 //uint32_t array
-                LocalUniformDescriptor<uint32_t>{
+                UniformsDescriptor::ArrayUI32{
                     {"uBumpMapAvailableUint",
                      "uMetallicMapAvailableUint",
                      "uRoughnessMapAvailableUint"},
@@ -323,11 +321,11 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                      offsetof(RenderModel, RenderModel::roughnessTexture)},
                     {sizeof(RenderModel), sizeof(RenderModel), sizeof(RenderModel)}},
                 //float1
-                LocalUniformDescriptor<float>{},
+                UniformsDescriptor::ArrayF1{},
                 //float3
-                LocalUniformDescriptor<float>{},
+                UniformsDescriptor::ArrayF3{},
                 //mat4
-                LocalUniformDescriptor<float>{
+                UniformsDescriptor::ArrayMAT4{
                     {"uColor",
                      "uModelMat"},
                     {reinterpret_cast<float const *>(models.data()),
@@ -340,26 +338,50 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
 
     {
         CreateShaderProgramUniformBindings(
+            desc.velocity,
+            UniformsDescriptor{
+                UniformsDescriptor::UI32{},
+                UniformsDescriptor::F1{},
+                UniformsDescriptor::F3{},
+                UniformsDescriptor::MAT4{
+                    {"uPrevViewMat4", "uPrevProjMat4", "uViewMat4", "uProjMat4"},
+                    {g_taaBuffer.prevView.data, g_taaBuffer.prevProj.data, g_camera.view.data, g_camera.proj.data},
+                },
+                UniformsDescriptor::ArrayUI32{},
+                UniformsDescriptor::ArrayF1{},
+                UniformsDescriptor::ArrayF3{},
+                UniformsDescriptor::ArrayMAT4{
+                    {"uPrevModelMat4", "uModelMat4"},
+                    {reinterpret_cast<float const *>(g_taaBuffer.prevModels.data()),
+                     reinterpret_cast<float const *>(models.data())},
+                    {0, offsetof(RenderModel, RenderModel::model)},
+                    {sizeof(sr::math::Matrix4x4), sizeof(RenderModel)},
+                },
+            });
+    }
+
+    {
+        CreateShaderProgramUniformBindings(
             desc.taa,
             UniformsDescriptor{
-                GlobalUniformDescriptor<uint32_t>{
+                UniformsDescriptor::UI32{
                     {"uFrameCountUint"},
                     {&g_taaBuffer.count}},
-                GlobalUniformDescriptor<float>{
+                UniformsDescriptor::F1{
                     {"uNearFloat", "uFarFloat"},
                     {&g_camera.near, &g_camera.far}},
-                GlobalUniformDescriptor<float>{},
-                GlobalUniformDescriptor<float>{
+                UniformsDescriptor::F3{},
+                UniformsDescriptor::MAT4{
                     {"uViewMat", "uProjMat", "uJitterMat", "uPrevViewMat", "uPrevProjMat"},
                     {g_camera.view.data,
                      g_camera.proj.data,
                      g_taaBuffer.jitter.data,
                      g_taaBuffer.prevView.data,
                      g_taaBuffer.prevProj.data}},
-                LocalUniformDescriptor<uint32_t>{},
-                LocalUniformDescriptor<float>{},
-                LocalUniformDescriptor<float>{},
-                LocalUniformDescriptor<float>{},
+                UniformsDescriptor::ArrayUI32{},
+                UniformsDescriptor::ArrayF1{},
+                UniformsDescriptor::ArrayF3{},
+                UniformsDescriptor::ArrayMAT4{},
             });
     }
 
@@ -367,16 +389,26 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
         CreateShaderProgramUniformBindings(
             desc.debug,
             UniformsDescriptor{
-                GlobalUniformDescriptor<uint32_t>{},
-                GlobalUniformDescriptor<float>{},
-                GlobalUniformDescriptor<float>{},
-                GlobalUniformDescriptor<float>{},
-                LocalUniformDescriptor<uint32_t>{},
-                LocalUniformDescriptor<float>{},
-                LocalUniformDescriptor<float>{},
-                LocalUniformDescriptor<float>{},
+                UniformsDescriptor::UI32{},
+                UniformsDescriptor::F1{},
+                UniformsDescriptor::F3{},
+                UniformsDescriptor::MAT4{},
+                UniformsDescriptor::ArrayUI32{},
+                UniformsDescriptor::ArrayF1{},
+                UniformsDescriptor::ArrayF3{},
+                UniformsDescriptor::ArrayMAT4{},
             });
     }
+}
+
+void UpdateModels(std::vector<RenderModel> &models)
+{
+    auto now = std::chrono::system_clock::now().time_since_epoch();
+    uint64_t const time = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+    float const s = std::sin(time);
+    models.back().model = sr::math::Mul(
+        sr::math::CreateTranslationMatrix(0, 0, (s > 0 ? -1 : 1)),
+        models.back().model);
 }
 
 void RenderPassShadowMap(Pipeline &pipeline, std::vector<RenderModel> const &models)
@@ -395,6 +427,17 @@ void RenderPassLighting(Pipeline &pipeline, std::vector<RenderModel> const &mode
     g_taaBuffer.jitter._24 = g_taaSubPixelSamples[taaSampleIndex].y / pipeline.lighting.height;
 
     ExecuteRenderPass(pipeline.lighting, models.data(), models.size());
+}
+
+void RenderPassVelocity(Pipeline &pipeline, std::vector<RenderModel> const &models)
+{
+    ExecuteRenderPass(pipeline.velocity, models.data(), models.size());
+
+    g_taaBuffer.prevModels.resize(models.size());
+    for (uint64_t i = 0; i < models.size(); ++i)
+    {
+        g_taaBuffer.prevModels[i] = models[i].model;
+    }
 }
 
 void RenderPassTAA(Pipeline &pipeline)
@@ -426,6 +469,7 @@ void MainLoop(GLFWwindow *window)
     std::vector<sr::load::MaterialSource> materials;
     auto programs = CreatePipelineShaderPrograms();
     auto models = LoadModels(programs.lighting);
+    g_taaBuffer.prevModels.resize(models.size());
     CreatePipelineUniformBindngs(programs, models);
     auto pipeline = CreateRenderPipeline(programs, swapchainFramebufferWidth, swapchainFramebufferHeight);
 
@@ -447,8 +491,10 @@ void MainLoop(GLFWwindow *window)
             g_isHotRealoadRequired = false;
         }
 
+        UpdateModels(models);
         RenderPassShadowMap(pipeline, models);
         RenderPassLighting(pipeline, models);
+        RenderPassVelocity(pipeline, models);
         RenderPassTAA(pipeline);
         RenderPassDebug(pipeline);
 

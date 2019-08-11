@@ -28,12 +28,12 @@ struct Vec2
         float data[2];
     };
 
-    Vec2 operator-() const
+    constexpr Vec2 operator-() const
     {
         return {-x, -y};
     }
 
-    Vec2 operator/(float s) const
+    constexpr Vec2 operator/(float s) const
     {
         return {x / s, y / s};
     }
@@ -53,12 +53,12 @@ struct Vec3
         float data[3];
     };
 
-    Vec3 operator+(Vec3 const &other) const
+    constexpr Vec3 operator+(Vec3 const &other) const
     {
         return {other.x + x, other.y + y, other.z + z};
     }
 
-    Vec3 operator-() const
+    constexpr Vec3 operator-() const
     {
         return {-x, -y, -z};
     }
@@ -78,17 +78,17 @@ struct Vec4
         float data[4];
     };
 
-    Vec4 operator-() const
+    constexpr Vec4 operator-() const
     {
         return {-x, -y, -z, -w};
     }
 
-    Vec4 operator*(float s) const
+    constexpr Vec4 operator*(float s) const
     {
         return {x * s, y * s, z * s, w * s};
     }
 
-    Vec4 operator/(float s) const
+    constexpr Vec4 operator/(float s) const
     {
         return {x / s, y / s, z / s, w / s};
     }
@@ -109,6 +109,7 @@ struct Matrix4x4
                 _41, _42, _43, _44;
         };
         float data[16];
+        float rows[4][4];
     };
 };
 
@@ -120,6 +121,15 @@ constexpr float Dot(Vec3 a, Vec3 b)
 constexpr float Dot(Vec4 a, Vec4 b)
 {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+}
+
+constexpr Matrix4x4 Mul(Matrix4x4 mat, float s)
+{
+    return {
+        mat._1 * s,
+        mat._2 * s,
+        mat._3 * s,
+        mat._4 * s};
 }
 
 constexpr Vec4 Mul(Matrix4x4 mat, Vec4 vec)
@@ -138,10 +148,16 @@ constexpr Matrix4x4 Mul(Matrix4x4 a, Matrix4x4 b)
 {
     Matrix4x4 result = {};
 
-    result._1 = Mul(a, Vec4{b._11, b._21, b._31, b._41});
-    result._2 = Mul(a, Vec4{b._12, b._22, b._32, b._42});
-    result._3 = Mul(a, Vec4{b._13, b._23, b._33, b._43});
-    result._4 = Mul(a, Vec4{b._14, b._24, b._34, b._44});
+    for (uint8_t i = 0; i < 4; ++i)
+    {
+        for (uint8_t j = 0; j < 4; ++j)
+        {
+            for (uint8_t k = 0; k < 4; ++k)
+            {
+                result.rows[i][j] += a.rows[i][k] * b.rows[k][j];
+            }
+        }
+    }
 
     return result;
 }
@@ -149,23 +165,10 @@ constexpr Matrix4x4 Mul(Matrix4x4 a, Matrix4x4 b)
 constexpr Matrix4x4 Transpose(Matrix4x4 m)
 {
     return {
-        m._11,
-        m._21,
-        m._31,
-        m._41,
-        m._12,
-        m._22,
-        m._32,
-        m._42,
-        m._13,
-        m._23,
-        m._33,
-        m._43,
-        m._14,
-        m._24,
-        m._34,
-        m._44,
-    };
+        m._11, m._21, m._31, m._41,
+        m._12, m._22, m._32, m._42,
+        m._13, m._23, m._33, m._43,
+        m._14, m._24, m._34, m._44};
 }
 
 constexpr Matrix4x4 CreateIdentityMatrix()
@@ -256,6 +259,65 @@ constexpr Matrix4x4 CreateChangeOfBasisMatrix(math::Vec3 dir, math::Vec3 up, mat
         right.x, right.y, right.z, math::Dot(-right, pos),
         up.x, up.y, up.z, math::Dot(-up, pos),
         dir.x, dir.y, dir.z, math::Dot(-dir, pos),
+        0, 0, 0, 1};
+}
+
+Matrix4x4 CreateScaleMatrix(float x, float y, float z)
+{
+    return {
+        x, 0, 0, 0,
+        0, y, 0, 0,
+        0, 0, z, 0,
+        0, 0, 0, 1};
+}
+
+Matrix4x4 CreateScaleMatrix(float s)
+{
+    return CreateScaleMatrix(s, s, s);
+}
+
+Matrix4x4 CreateRotationMatrixX(float a)
+{
+    auto const c = std::cos(a);
+    auto const s = std::sin(a);
+
+    return {
+        1, 0, 0, 0,
+        0, c, -s, 0,
+        0, s, c, 0,
+        0, 0, 0, 1};
+}
+
+Matrix4x4 CreateRotationMatrixY(float a)
+{
+    auto const c = std::cos(a);
+    auto const s = std::sin(a);
+
+    return {
+        c, 0, s, 0,
+        0, 1, 0, 0,
+        -s, 0, c, 0,
+        0, 0, 0, 1};
+}
+
+Matrix4x4 CreateRotationMatrixZ(float a)
+{
+    auto const c = std::cos(a);
+    auto const s = std::sin(a);
+
+    return {
+        c, -s, 0, 0,
+        s, c, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1};
+}
+
+Matrix4x4 CreateTranslationMatrix(float x, float y, float z)
+{
+    return {
+        1, 0, 0, x,
+        0, 1, 0, y,
+        0, 0, 1, z,
         0, 0, 0, 1};
 }
 

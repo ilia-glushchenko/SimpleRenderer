@@ -130,13 +130,14 @@ struct LocalUniformDescriptor
 struct UniformsDescriptor
 {
     using UI32 = GlobalUniformDescriptor<uint32_t>;
-    using FLOA1 = GlobalUniformDescriptor<float>;
-    using FLOAT3 = GlobalUniformDescriptor<float>;
+    using F1 = GlobalUniformDescriptor<float>;
+    using F3 = GlobalUniformDescriptor<float>;
     using MAT4 = GlobalUniformDescriptor<float>;
-    using UI32_ARRAY = GlobalUniformDescriptor<uint32_t>;
-    using FLOA1_ARRAY = GlobalUniformDescriptor<float>;
-    using FLOAT3_ARRAY = GlobalUniformDescriptor<float>;
-    using MAT4_ARRAY = GlobalUniformDescriptor<float>;
+
+    using ArrayUI32 = LocalUniformDescriptor<uint32_t>;
+    using ArrayF1 = LocalUniformDescriptor<float>;
+    using ArrayF3 = LocalUniformDescriptor<float>;
+    using ArrayMAT4 = LocalUniformDescriptor<float>;
 
     GlobalUniformDescriptor<uint32_t> ui32;
     GlobalUniformDescriptor<float> float1;
@@ -162,6 +163,7 @@ struct Texture2DDescriptor
 
 struct TAABuffer
 {
+    std::vector<sr::math::Matrix4x4> prevModels;
     sr::math::Matrix4x4 prevView = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 prevProj = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 jitter = sr::math::CreateIdentityMatrix();
@@ -214,6 +216,7 @@ struct PipelineShaderPrograms
 {
     ShaderProgram shadowMapping;
     ShaderProgram lighting;
+    ShaderProgram velocity;
     ShaderProgram taa;
     ShaderProgram debug;
 };
@@ -222,6 +225,7 @@ struct Pipeline
 {
     RenderPass shadowMapping;
     RenderPass lighting;
+    RenderPass velocity;
     RenderPass taa;
     RenderPass debug;
 };
