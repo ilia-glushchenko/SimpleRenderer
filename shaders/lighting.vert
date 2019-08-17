@@ -26,8 +26,8 @@ void main()
     positionView = uViewMat * uModelMat * vec4(aPosition, 1);
     normalWorld = (uModelMat * vec4(aNormal, 0)).xyz;
     normalView = (uViewMat * uModelMat * vec4(aNormal, 0)).xyz;
-    directionalLightDir = (uViewMat * normalize(vec4(0, 1, 0, 0))).xyz;
 
+    directionalLightDir = (uViewMat * normalize(vec4(0, 1, 0, 0))).xyz;
     positionShadowMapMvp = uDirLightProjMat * uDirLightViewMat * uModelMat * vec4(aPosition, 1.0);
 
     uv = aUV;

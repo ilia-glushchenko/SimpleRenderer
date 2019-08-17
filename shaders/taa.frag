@@ -63,6 +63,24 @@ vec2 ReverseReprojectUV(vec2 currentUV)
     return fragUV;
 }
 
+vec3 Sample9x9(vec2 currentUV)
+{
+    ivec2 wh = textureSize(uColorTextureSampler2D, 0);
+
+    float dx = 1.0f / wh.x;
+	float dy = 1.0f / wh.y;
+
+	vec3 s = vec3(0,0,0);
+
+    for(int i = -3; i < 3; i++) {
+        for(int j = -3; j < 3; j++) {
+            s+=texture(uColorTextureSampler2D, uv+vec2(i*dx, j*dy)).rgb;
+        }
+    }
+
+    return s / 36;
+}
+
 vec3 SampleLocalMinima(vec2 currentUV)
 {
     ivec2 wh = textureSize(uColorTextureSampler2D, 0);

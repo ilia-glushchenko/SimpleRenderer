@@ -3,10 +3,13 @@
  * This code is licensed under the MIT license (MIT)
  * (http://opensource.org/licenses/MIT)
  */
+#include "RenderDefinitions.hpp"
+#include "RenderConfiguration.hpp"
+#include "RenderPass.hpp"
+#include "RenderModel.hpp"
+#include "Camera.hpp"
 #include "Math.hpp"
 #include "Loader.hpp"
-#include "Renderer.hpp"
-#include "RenderPass.hpp"
 #include "TestModels.hpp"
 
 #include <ctime>
@@ -43,9 +46,6 @@ enum class eRenderMode : uint32_t
     ShadowMap = 5,
     MetallicMap = 6,
     Roughnessmap = 7,
-    UVNNMap = 8,
-    UVMipMap = 9,
-    UVAnisMap = 10,
     Count
 } g_renderMode = {};
 char const *g_renderModesStr[static_cast<uint32_t>(eRenderMode::Count)] = {
@@ -56,10 +56,7 @@ char const *g_renderModesStr[static_cast<uint32_t>(eRenderMode::Count)] = {
     "Depth",
     "ShadowMap",
     "MetallicMap",
-    "RoughnessMap",
-    "UVNNMap",
-    "UVMipMap",
-    "UVAnisMap"};
+    "RoughnessMap"};
 
 sr::math::Matrix4x4 CreateViewMatrix(sr::math::Vec3 pos, float yWorldAngle)
 {
@@ -211,24 +208,24 @@ std::vector<RenderModel> LoadModels(ShaderProgram const &program)
             program.handle, models[i], g_shaderAttributesPositionNormalUV);
     }
 
-    tinyobj::material_t material;
-    material.diffuse_texname = "sjggaija_8K_Albedo.jpg";
-    material.bump_texname = "sjggaija_8K_Bump.jpg";
-    material.normal_texname = "sjggaija_8K_Normal.jpg";
-    material.roughness_texname = "sjggaija_8K_Roughness.jpg";
-    sr::load::LoadOBJ("data\\quad", "quad.obj", geometries, materials);
-    models.push_back(CreateRenderModel(
-        sr::load::CreateBufferDescriptors(geometries.back()),
-        sr::load::CreateIndexBufferDescriptor(geometries.back()),
-        sr::load::CreateMaterialSource(
-            "data\\materials\\Rock_Cliffs_sjggaija_8K_surface_ms", material)));
-    LinkRenderModelToShaderProgram(
-        program.handle, models.back(), g_shaderAttributesPositionNormalUV);
-    models.back().model = sr::math::Mul(
-        sr::math::CreateTranslationMatrix(0, 50.f, 0),
-        sr::math::Mul(
-            sr::math::CreateScaleMatrix(100.f),
-            sr::math::CreateRotationMatrixY(6.28f * 0.65f)));
+    // tinyobj::material_t material;
+    // material.diffuse_texname = "shfsaida_2K_Albedo.jpg";
+    // material.bump_texname = "shfsaida_2K_Bump.jpg";
+    // material.normal_texname = "shfsaida_2K_Normal.jpg";
+    // material.roughness_texname = "shfsaida_2K_Roughness.jpg";
+    // sr::load::LoadOBJ("data\\quad", "quad.obj", geometries, materials);
+    // models.push_back(CreateRenderModel(
+    //     sr::load::CreateBufferDescriptors(geometries.back()),
+    //     sr::load::CreateIndexBufferDescriptor(geometries.back()),
+    //     sr::load::CreateMaterialSource(
+    //         "data\\materials\\2k\\Rock_Cliffs_shfsaida_2K_surface_ms", material)));
+    // LinkRenderModelToShaderProgram(
+    //     program.handle, models.back(), g_shaderAttributesPositionNormalUV);
+    // models.back().model = sr::math::Mul(
+    //     sr::math::CreateTranslationMatrix(0, 50.f, 0),
+    //     sr::math::Mul(
+    //         sr::math::CreateScaleMatrix(100.f),
+    //         sr::math::CreateRotationMatrixY(6.28f * 0.65f)));
 
     for (auto &material : materials)
     {
@@ -245,6 +242,8 @@ PipelineShaderPrograms CreatePipelineShaderPrograms()
     desc.shadowMapping = CreateShaderProgram("shaders/shadow_mapping.vert", "shaders/shadow_mapping.frag");
     desc.lighting = CreateShaderProgram("shaders/lighting.vert", "shaders/lighting.frag");
     desc.velocity = CreateShaderProgram("shaders/velocity.vert", "shaders/velocity.frag");
+    desc.toneMapping = CreateShaderProgram("shaders/tone_mapping.vert", "shaders/tone_mapping.frag");
+    LinkRenderModelToShaderProgram(desc.lighting.handle, g_quadWallRenderModel, g_shaderAttributesPositionNormalUV);
     desc.taa = CreateShaderProgram("shaders/taa.vert", "shaders/taa.frag");
     LinkRenderModelToShaderProgram(desc.taa.handle, g_quadWallRenderModel, g_shaderAttributesPositionNormalUV);
     desc.debug = CreateShaderProgram("shaders/debug.vert", "shaders/debug.frag");
@@ -362,6 +361,21 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
 
     {
         CreateShaderProgramUniformBindings(
+            desc.toneMapping,
+            UniformsDescriptor{
+                UniformsDescriptor::UI32{},
+                UniformsDescriptor::F1{},
+                UniformsDescriptor::F3{},
+                UniformsDescriptor::MAT4{},
+                UniformsDescriptor::ArrayUI32{},
+                UniformsDescriptor::ArrayF1{},
+                UniformsDescriptor::ArrayF3{},
+                UniformsDescriptor::ArrayMAT4{},
+            });
+    }
+
+    {
+        CreateShaderProgramUniformBindings(
             desc.taa,
             UniformsDescriptor{
                 UniformsDescriptor::UI32{
@@ -405,14 +419,18 @@ void UpdateModels(std::vector<RenderModel> &models)
 {
     auto now = std::chrono::system_clock::now().time_since_epoch();
     uint64_t const time = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
-    float const s = std::sin(time);
-    models.back().model = sr::math::Mul(
-        sr::math::CreateTranslationMatrix(0, 0, (s > 0 ? -1 : 1)),
-        models.back().model);
+    //float const s = std::sin(time);
+    //models.back().model = sr::math::Mul(
+    //    sr::math::CreateTranslationMatrix(0, 0, (s > 0 ? -1 : 1)),
+    //    models.back().model);
 }
 
 void RenderPassShadowMap(Pipeline &pipeline, std::vector<RenderModel> const &models)
 {
+    //static std::string message = {"RenderPassShadowMap"};
+    //glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION,
+    //                     message.length(), message.c_str());
+
     g_camera.view = CreateViewMatrix(g_camera.pos, g_camera.yWorldAndle);
 
     ExecuteRenderPass(pipeline.shadowMapping, models.data(), models.size());
@@ -420,6 +438,10 @@ void RenderPassShadowMap(Pipeline &pipeline, std::vector<RenderModel> const &mod
 
 void RenderPassLighting(Pipeline &pipeline, std::vector<RenderModel> const &models)
 {
+    //static std::string message = {"RenderPassLighting"};
+    //glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION,
+    //                     message.length(), message.c_str());
+
     g_camera.view = CreateViewMatrix(g_camera.pos, g_camera.yWorldAndle);
     g_camera.proj = sr::math::CreatePerspectiveProjectionMatrix(g_camera.near, g_camera.far, g_camera.fov, g_camera.aspect);
     const uint32_t taaSampleIndex = g_taaBuffer.count % g_taaSubPixelSampleCount;
@@ -431,6 +453,10 @@ void RenderPassLighting(Pipeline &pipeline, std::vector<RenderModel> const &mode
 
 void RenderPassVelocity(Pipeline &pipeline, std::vector<RenderModel> const &models)
 {
+    //static std::string message = {"RenderPassVelocity"};
+    //glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION,
+    //                     message.length(), message.c_str());
+
     ExecuteRenderPass(pipeline.velocity, models.data(), models.size());
 
     g_taaBuffer.prevModels.resize(models.size());
@@ -440,8 +466,21 @@ void RenderPassVelocity(Pipeline &pipeline, std::vector<RenderModel> const &mode
     }
 }
 
+void RenderPassToneMapping(Pipeline &pipeline)
+{
+    //static std::string message = {"RenderPassToneMapping"};
+    //glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION,
+    //                     message.length(), message.c_str());
+
+    ExecuteRenderPass(pipeline.toneMapping, &g_quadWallRenderModel, 1);
+}
+
 void RenderPassTAA(Pipeline &pipeline)
 {
+    //static std::string message = {"RenderPassTAA"};
+    //glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION,
+    //                     message.length(), message.c_str());
+
     ExecuteRenderPass(pipeline.taa, &g_quadWallRenderModel, 1);
 
     pipeline.taa.subPasses[0].active = !pipeline.taa.subPasses[0].active;
@@ -454,10 +493,14 @@ void RenderPassTAA(Pipeline &pipeline)
 
 void RenderPassDebug(Pipeline &pipeline)
 {
+    //static std::string message = {"RenderPassDebug"};
+    //glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION,
+    //                     message.length(), message.c_str());
+
     ExecuteRenderPass(pipeline.debug, &g_quadWallRenderModel, 1);
 
-    std::swap(pipeline.debug.subPasses[0].desc.dependencies[2].handle,
-              pipeline.debug.subPasses[0].desc.dependencies[3].handle);
+    std::swap(pipeline.debug.subPasses[0].desc.dependencies[4].handle,
+              pipeline.debug.subPasses[0].desc.dependencies[5].handle);
 }
 
 void MainLoop(GLFWwindow *window)
@@ -495,6 +538,7 @@ void MainLoop(GLFWwindow *window)
         RenderPassShadowMap(pipeline, models);
         RenderPassLighting(pipeline, models);
         RenderPassVelocity(pipeline, models);
+        RenderPassToneMapping(pipeline);
         RenderPassTAA(pipeline);
         RenderPassDebug(pipeline);
 

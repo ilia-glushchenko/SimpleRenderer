@@ -5,7 +5,7 @@
  */
 #pragma once
 
-#include "RendererDefinitions.hpp"
+#include "RenderDefinitions.hpp"
 #include "Math.hpp"
 
 #define TINYOBJLOADER_IMPLEMENTATION

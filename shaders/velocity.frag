@@ -16,5 +16,5 @@ void main()
 {
     vec3 a = inPosition.xyz / inPosition.w;
     vec3 b = inPrevPosition.xyz / inPrevPosition.w;
-    velocity = vec4(b - a, 1);
+    velocity = vec4(b.xy - a.xy, 0, 1);
 }

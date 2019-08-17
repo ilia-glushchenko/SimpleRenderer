@@ -5,7 +5,10 @@
  */
 #pragma once
 
-#include <RendererDefinitions.hpp>
+#include "RenderDefinitions.hpp"
+#include "ShaderProgram.hpp"
+
+#include <cassert>
 
 RenderPass CreateRenderPass(SubPassDescriptor const *desc, uint8_t count, ShaderProgram program, int32_t width, int32_t height)
 {
@@ -93,7 +96,7 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
             pipeline.shadowMapping.subPasses[0].desc.attachments[0].handle};
         desc.attachmentCount = 2;
         desc.attachments[0] = SubPassAttachmentDescriptor{
-            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateEmptyRGBATexture(width, height)};
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
         desc.attachments[1] = SubPassAttachmentDescriptor{
             GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, CreateDepthTexture(width, height)};
 
@@ -105,24 +108,37 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
 
         desc.attachmentCount = 1;
         desc.attachments[0] = SubPassAttachmentDescriptor{
-            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateEmptyRGBATexture(width, height)};
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
 
         pipeline.velocity = CreateRenderPass(&desc, 1, programs.velocity, width, height);
     }
 
     {
-        auto const texture1 = CreateEmptyRGBATexture(width, height);
-        auto const texture2 = CreateEmptyRGBATexture(width, height);
+        SubPassDescriptor desc;
+        desc.dependencyCount = 1;
+        desc.dependencies[0] = SubPassDependencyDescriptor{
+            GL_TEXTURE0,
+            GL_TEXTURE_2D,
+            pipeline.lighting.subPasses[0].desc.attachments[0].handle};
+        desc.attachmentCount = 1;
+        desc.attachments[0] = SubPassAttachmentDescriptor{
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
+
+        pipeline.toneMapping = CreateRenderPass(&desc, 1, programs.toneMapping, width, height);
+    }
+
+    {
+        auto const texture1 = CreateColorAttachment(width, height);
+        auto const texture2 = CreateColorAttachment(width, height);
 
         SubPassDescriptor desc[2];
 
         desc[0].dependencyCount = 4;
         desc[0].dependencies[0] = SubPassDependencyDescriptor{
-            GL_TEXTURE0, GL_TEXTURE_2D, pipeline.lighting.subPasses[0].desc.attachments[0].handle};
+            GL_TEXTURE0, GL_TEXTURE_2D, pipeline.toneMapping.subPasses[0].desc.attachments[0].handle};
         desc[0].dependencies[1] = SubPassDependencyDescriptor{
             GL_TEXTURE1, GL_TEXTURE_2D, pipeline.lighting.subPasses[0].desc.attachments[1].handle};
-        desc[0].dependencies[2] = SubPassDependencyDescriptor{
-            GL_TEXTURE2, GL_TEXTURE_2D, texture2};
+        desc[0].dependencies[2] = SubPassDependencyDescriptor{GL_TEXTURE2, GL_TEXTURE_2D, texture2};
         desc[0].dependencies[3] = SubPassDependencyDescriptor{
             GL_TEXTURE3, GL_TEXTURE_2D, pipeline.velocity.subPasses[0].desc.attachments[0].handle};
         desc[0].attachmentCount = 1;
@@ -142,7 +158,7 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
 
     {
         SubPassDescriptor desc;
-        desc.dependencyCount = 5;
+        desc.dependencyCount = 6;
         desc.dependencies[0] = SubPassDependencyDescriptor{
             GL_TEXTURE0,
             GL_TEXTURE_2D,
@@ -154,20 +170,22 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.dependencies[2] = SubPassDependencyDescriptor{
             GL_TEXTURE2,
             GL_TEXTURE_2D,
-            pipeline.taa.subPasses[1].desc.attachments[0].handle};
+            pipeline.velocity.subPasses[0].desc.attachments[0].handle};
         desc.dependencies[3] = SubPassDependencyDescriptor{
             GL_TEXTURE3,
             GL_TEXTURE_2D,
-            pipeline.taa.subPasses[0].desc.attachments[0].handle};
+            pipeline.toneMapping.subPasses[0].desc.attachments[0].handle};
         desc.dependencies[4] = SubPassDependencyDescriptor{
             GL_TEXTURE4,
             GL_TEXTURE_2D,
-            pipeline.velocity.subPasses[0].desc.attachments[0].handle};
+            pipeline.taa.subPasses[1].desc.attachments[0].handle};
+        desc.dependencies[5] = SubPassDependencyDescriptor{
+            GL_TEXTURE5,
+            GL_TEXTURE_2D,
+            pipeline.taa.subPasses[0].desc.attachments[0].handle};
         desc.attachmentCount = 1;
         desc.attachments[0] = SubPassAttachmentDescriptor{
-            GL_COLOR_ATTACHMENT0,
-            GL_TEXTURE_2D,
-            CreateEmptyRGBATexture(width, height)};
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
 
         pipeline.debug = CreateRenderPass(&desc, 1, programs.debug, width, height);
     }

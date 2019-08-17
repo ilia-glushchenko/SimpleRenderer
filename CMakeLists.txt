@@ -40,17 +40,20 @@ include_directories(
     ${SIMPLE_RENDERER_INCLUDE_DIR}
 )
 set(SIMPLE_REDNERER_HEADERS
+    include/RenderConfiguration.hpp
+    include/RenderDefinitions.hpp
+    include/RenderPass.hpp
+    include/RenderModel.hpp
+    include/ShaderProgram.hpp
+    include/Camera.hpp
+    include/TestModels.hpp
+    include/Texture.hpp
     include/Math.hpp
     include/Loader.hpp
-    include/TestModels.hpp
-    include/RendererDefinitions.hpp
-    include/Renderer.hpp
-    include/RenderPass.hpp
 )
 
 set(SIMPLE_RENDERER_SOURCES
     source/Main.cpp
-    source/Math.cpp
 )
 
 add_executable (${PROJECT_NAME}

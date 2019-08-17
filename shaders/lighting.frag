@@ -30,6 +30,7 @@ layout (location = 6) in vec2 inUv;
 
 layout (location = 0) out vec4 outColor;
 
+const float MipBias = 0;
 const float PI = 3.1415926535897932384626433832795;
 const vec3 SUN_LIGHT_COLOR = vec3(252.0 / 255.0, 212/ 255.0, 64 / 255.0); // Sun
 const vec3 POINT_LIGHT_COLOR = vec3(255.0 / 255.0, 209/ 255.0, 163 / 255.0); // 4000k
@@ -37,58 +38,24 @@ const float SilkIOR = 1.5605f;
 const float MarbleIOR = 1.486f;
 const float AirIOR = 1.00029f;
 
-float nearest_neighbour_checkerboard_color(vec2 inUv)
+vec3 AnisatropicTextureSample(sampler2D samp, vec2 sampleUV)
 {
-    return mod(floor(inUv.x) + floor(inUv.y), 2) < 1 ? 1 : 0;
+    vec2 dx = dFdxFine(sampleUV.xy) * 0.25; // horizontal offset
+    vec2 dy = dFdyFine(sampleUV.xy) * 0.25; // vertical offset
+    // supersampled 2x2 ordered grid
+    vec3 col = vec3(0);
+    col += texture(samp, sampleUV.xy + dx + dy, MipBias).rgb;
+    col += texture(samp, sampleUV.xy - dx + dy, MipBias).rgb;
+    col += texture(samp, sampleUV.xy + dx - dy, MipBias).rgb;
+    col += texture(samp, sampleUV.xy - dx - dy, MipBias).rgb;
+    col *= 0.25;
+
+    //return col;
+
+    return texture(samp, sampleUV, MipBias).rgb;
 }
 
-float filter_width(vec2 v)
-{
-    vec2 fw = max(abs(dFdxFine(v)), abs(dFdyFine(v)));
-    return max(fw.x, fw.y);
-}
-
-vec2 bump_int(vec2 x)
-{
-    return vec2(
-        floor(x/2) + 2.f * max(x/2 - floor(x/2) - .5f, 0.f)
-    );
-}
-
-float mipmap_checkerboard_color(vec2 inUv)
-{
-    float width = filter_width(inUv);
-
-    vec2 p0 = inUv - .5 * width;
-    vec2 p1 = inUv + .5 * width;
-
-    vec2 i = (bump_int(p1) - bump_int(p0)) / width;
-
-    return i.x * i.y + (1 - i.x) * (1 - i.y);
-}
-
-float anisatropic_checkerboard_color(vec2 inUv)
-{
-    float samples_count = 32.f;
-    float width = filter_width(inUv) / samples_count;
-    float w = width;
-    float color = 0;
-
-    for (int j = 0; j < samples_count; ++j)
-    {
-        vec2 p0 = inUv - .5 * w;
-        vec2 p1 = inUv + .5 * w;
-
-        vec2 i = (bump_int(p1) - bump_int(p0)) / w;
-
-        color += (i.x * i.y + (1 - i.x) * (1 - i.y));
-        w += width;
-    }
-
-    return color / samples_count;
-}
-
-mat3 cotangent_frame( vec3 N, vec3 p, vec2 pUV )
+mat3 CalculateTBNMatrix( vec3 N, vec3 p, vec2 pUV )
 {
     // get edge vectors of the pixel triangle
     vec3 dp1 = dFdx( p );
@@ -184,50 +151,53 @@ float LightFalloffWindowingFunction(float r0, float rMin, float rMax, float r)
     return pow(r0 / max(r, rMin), 2) * pow(max(1 - pow(r / rMax, 4), 0), 2);
 }
 
+vec3 CalculateRadiance(float depth, vec2 uv, vec3 n, vec3 shadowPosMVP, mat3 TBN)
+{
+    vec3 view = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
+
+    if (bool(uBumpMapAvailableUint) && bool(uBumpMappingEnabledUint)) {
+        float h = AnisatropicTextureSample(uBumpMapSampler2D, uv).r;
+        uv = uv + h * (TBN * view.xyz).xy * uBumpMapScaleFactorFloat;
+    }
+
+    vec3 ssAlbedo = AnisatropicTextureSample(uAlbedoMapSampler2D, uv).rgb;
+    vec3 normal = normalize((AnisatropicTextureSample(uNormalMapSampler2D, uv).xyz * 2) - 1);
+    normal = normalize(n + TBN * normal);
+    normal = n;
+    float ro = bool(uRoughnessMapAvailableUint) ? AnisatropicTextureSample(uRoughnessSampler2D, uv).r : 1;
+
+    float fSpecDL = 0;
+    if (bool(uShadowMappingEnabledUint) && abs(shadowPosMVP.z) < depth - 0.45f) {
+        fSpecDL = CookTorance(view, normal, directionalLightDir, ro);
+    }
+
+    vec3 pointLightDir = -normalize(positionWorld.xyz / positionWorld.w - uPointLightPos);
+    vec3 diff = (1 - FresnelSchlick(view, pointLightDir)) * ssAlbedo / PI;
+    float fSpecPL = CookTorance(view, normal, pointLightDir, ro);
+    vec3 spec = PI * fSpecPL * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0);
+
+    float d = distance(uPointLightPos, positionWorld.xyz / positionWorld.w);
+    vec3 radiance = LightFalloffWindowingFunction(400, 1, 10000, d) * (diff + spec);
+
+    return radiance;
+}
+
 void main()
 {
+    outColor = vec4(1, 0, 0, 1);
     vec3 n = normalize(normalWorld);
     vec3 l = normalize(directionalLightDir);
 
     vec3 shadowPosMVP = positionShadowMapMvp.xyz / positionShadowMapMvp.w;
-    float depth = texture(uShadowMapSampler2D, (shadowPosMVP.xy+1)*0.5f).x;
+    float depth = AnisatropicTextureSample(uShadowMapSampler2D, (shadowPosMVP.xy+1)*0.5f).x;
 
-    mat3 TBN = cotangent_frame(n, positionWorld.xyz / positionWorld.w, inUv);
+    mat3 TBN = CalculateTBNMatrix(n, positionWorld.xyz / positionWorld.w, inUv);
     vec2 uv = inUv;
 
     if (uRenderModeUint == 0) // Full
     {
-        vec3 view = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
-
-        if (bool(uBumpMapAvailableUint) && bool(uBumpMappingEnabledUint))
-        {
-            float h = texture(uBumpMapSampler2D, uv).r;
-            uv = uv + h * (TBN * view.xyz).xy * uBumpMapScaleFactorFloat;
-        }
-
-        vec3 ssAlbedo = texture(uAlbedoMapSampler2D, uv).rgb;
-        vec3 normal = normalize((texture(uNormalMapSampler2D, uv).xyz * 2) - 1);
-        normal = normalize(n + TBN * normal);
-        float ro = bool(uRoughnessMapAvailableUint) ? texture(uRoughnessSampler2D, uv).r : 1;
-
-        float fSpecDL = 0;
-        if (bool(uShadowMappingEnabledUint) && abs(shadowPosMVP.z) < depth - 0.45f)
-        {
-            fSpecDL = CookTorance(view, normal, directionalLightDir, ro);
-        }
-
-        float d = distance(uPointLightPos, positionWorld.xyz / positionWorld.w);
-        vec3 pointLightDir = -normalize(positionWorld.xyz / positionWorld.w - uPointLightPos);
-
-        float fSpecPL = CookTorance(view, normal, pointLightDir, ro);
-        outColor = vec4(
-            //LightFalloffWindowingFunction(300, 1, 900, d) *
-            (1 - FresnelSchlick(view, pointLightDir)
-                 //- FresnelSchlick(view, directionalLightDir)
-                ) * ssAlbedo / PI
-            + PI * fSpecPL * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0)
-            + PI * fSpecDL * SUN_LIGHT_COLOR * max(dot(n, directionalLightDir), 0)
-            , 1);
+        vec3 radiance = CalculateRadiance(depth, uv, n, shadowPosMVP, TBN);
+        outColor = vec4(radiance, 1);
     }
     else if (uRenderModeUint == 1) // Normal
     {
@@ -238,11 +208,11 @@ void main()
         if (bool(uBumpMapAvailableUint) && bool(uBumpMappingEnabledUint))
         {
             vec3 view = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
-            float h = texture(uBumpMapSampler2D, uv).r;
+            float h = AnisatropicTextureSample(uBumpMapSampler2D, uv).r;
             uv = uv + h * (TBN * view.xyz).xy * uBumpMapScaleFactorFloat;
 
         }
-        vec3 normal = normalize((texture(uNormalMapSampler2D, uv).xyz * 2) - 1);
+        vec3 normal = normalize((texture(uNormalMapSampler2D, uv, MipBias).xyz * 2) - 1);
         normal = normalize(n + TBN * normal);
 
         outColor = vec4((n + normal + 1) * 0.5f, 1);
@@ -252,7 +222,7 @@ void main()
         outColor = vec4(n + vec3(1, 0, 0), 1);
         if (bool(uBumpMapAvailableUint))
         {
-            float bump = texture(uBumpMapSampler2D, uv).r;
+            float bump = texture(uBumpMapSampler2D, uv, MipBias).r;
             outColor = vec4(bump, bump, bump, 1);
         }
     }
@@ -267,32 +237,13 @@ void main()
     else if (uRenderModeUint == 6) // Metallic
     {
         outColor = bool(uMetallicMapAvailableUint)
-            ? vec4(texture(uMetallicSampler2D, uv).rrr, 1)
+            ? vec4(texture(uMetallicSampler2D, uv, MipBias).rrr, 1)
             : vec4(n + vec3(1, 0, 0), 1);
     }
     else if (uRenderModeUint == 7) // Roughness
     {
         outColor = bool(uRoughnessMapAvailableUint)
-            ? vec4(texture(uRoughnessSampler2D, uv).rrr, 1)
+            ? vec4(texture(uRoughnessSampler2D, uv, MipBias).rrr, 1)
             : vec4(n + vec3(1, 0, 0), 1);
-    }
-    else if (uRenderModeUint == 8) // UV
-    {
-        float color = nearest_neighbour_checkerboard_color(uv * 20);
-        outColor = vec4(color, color, color, 1);
-    }
-    else if (uRenderModeUint == 9) // UV mipmap
-    {
-        float color = mipmap_checkerboard_color(uv * 20);
-        outColor = vec4(color, color, color, 1);
-    }
-    else if (uRenderModeUint == 10) // UV anisatropic
-    {
-        float color = anisatropic_checkerboard_color(uv * 20);
-        outColor = vec4(color, color, color, 1);
-    }
-    else
-    {
-        outColor = vec4(1, 0, 0, 1);
     }
 }
