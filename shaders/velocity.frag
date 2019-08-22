@@ -14,7 +14,7 @@ layout (location = 0) out vec4 velocity;
 
 void main()
 {
-    vec3 a = inPosition.xyz / inPosition.w;
-    vec3 b = inPrevPosition.xyz / inPrevPosition.w;
-    velocity = vec4(b.xy - a.xy, 0, 1);
+    vec3 currentPos = inPosition.xyz / inPosition.w;
+    vec3 prevPos = inPrevPosition.xyz / inPrevPosition.w;
+    velocity = vec4(currentPos - prevPos, 1);
 }

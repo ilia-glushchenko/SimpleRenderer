@@ -20,7 +20,8 @@ Camera CreateCamera()
     camera.view = sr::math::CreateIdentityMatrix();
     //camera.pos = {-1217.f, 101.f, 40.f};
     camera.pos = {-1217.f, -2.3f, 41.f};
-    camera.yWorldAndle = -1.46f;
+    camera.xWorldAngle = 0;
+    camera.yWorldAngle = -1.46f;
 
     return camera;
 }

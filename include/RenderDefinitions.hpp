@@ -15,12 +15,14 @@ struct UniformBindingUI32
 {
     int32_t location = -1;
     uint32_t const *data = nullptr;
+    int32_t count = 0;
 };
 
 struct UniformBindingF1
 {
     int32_t location = -1;
     float const *data = nullptr;
+    int32_t count = 0;
 };
 using UniformBindingV3F = UniformBindingF1;
 using UniformBindingM4F = UniformBindingF1;
@@ -43,81 +45,12 @@ struct UniformBindingF1Array
 using UniformBindingV3FArray = UniformBindingF1Array;
 using UniformBindingM4FArray = UniformBindingF1Array;
 
-struct UniformTexture2D
-{
-    uint32_t handle = 0;
-    uint32_t unit = 0;
-};
-
-struct Camera
-{
-    sr::math::Matrix4x4 proj = sr::math::CreateIdentityMatrix();
-    sr::math::Matrix4x4 view = sr::math::CreateIdentityMatrix();
-    sr::math::Vec3 pos = {};
-    float yWorldAndle = 0;
-    float near = 0;
-    float far = 0;
-    float fov = 0;
-    float aspect = 0;
-};
-
-struct DirectionalLightSource
-{
-    sr::math::Matrix4x4 projection;
-    sr::math::Matrix4x4 view;
-};
-
-struct RenderModel
-{
-    std::vector<uint32_t> vbos = {};
-    GLuint indexBuffer = 0;
-    GLuint vertexArrayObject = 0;
-    GLuint albedoTexture = 0;
-    GLuint normalTexture = 0;
-    GLuint bumpTexture = 0;
-    GLuint metallicTexture = 0;
-    GLuint roughnessTexture = 0;
-    uint32_t indexCount = 0;
-    sr::math::Matrix4x4 model = sr::math::CreateIdentityMatrix();
-    sr::math::Vec3 color = {0.5f, 0.5f, 0.5f};
-};
-
-struct ShaderProgram
-{
-    std::vector<UniformBindingUI32> ui32;
-    std::vector<UniformBindingF1> f1;
-    std::vector<UniformBindingV3F> f3;
-    std::vector<UniformBindingM4F> f16;
-
-    std::vector<UniformBindingUI32Array> ui32Array;
-    std::vector<UniformBindingF1Array> f1Array;
-    std::vector<UniformBindingV3FArray> f3Array;
-    std::vector<UniformBindingM4FArray> f16Array;
-
-    GLuint vertexShaderHandle = 0;
-    GLuint fragmentShaderHandle = 0;
-    GLuint handle = 0;
-};
-
-struct BufferDescriptor
-{
-    uint32_t size = 0;
-    uint32_t count = 0;
-    void *data = nullptr;
-};
-
-struct AttributeDescriptor
-{
-    std::string name;
-    uint32_t dimensions = 0;
-    uint32_t stride = 0;
-};
-
 template <typename T>
 struct GlobalUniformDescriptor
 {
     std::vector<const char *> names;
     std::vector<T const *> data;
+    std::vector<int32_t> counts;
 };
 
 template <typename T>
@@ -152,6 +85,37 @@ struct UniformsDescriptor
     LocalUniformDescriptor<float> mat4Array;
 };
 
+struct ShaderProgram
+{
+    std::vector<UniformBindingUI32> ui32;
+    std::vector<UniformBindingF1> f1;
+    std::vector<UniformBindingV3F> f3;
+    std::vector<UniformBindingM4F> f16;
+
+    std::vector<UniformBindingUI32Array> ui32Array;
+    std::vector<UniformBindingF1Array> f1Array;
+    std::vector<UniformBindingV3FArray> f3Array;
+    std::vector<UniformBindingM4FArray> f16Array;
+
+    GLuint vertexShaderHandle = 0;
+    GLuint fragmentShaderHandle = 0;
+    GLuint handle = 0;
+};
+
+struct AttributeDescriptor
+{
+    std::string name;
+    uint32_t dimensions = 0;
+    uint32_t stride = 0;
+};
+
+struct BufferDescriptor
+{
+    uint32_t size = 0;
+    uint32_t count = 0;
+    void *data = nullptr;
+};
+
 struct Texture2DDescriptor
 {
     GLenum internalFormat;
@@ -161,15 +125,6 @@ struct Texture2DDescriptor
     GLenum tWrap = GL_REPEAT;
     GLenum minFilter = GL_LINEAR;
     GLenum magFilter = GL_LINEAR;
-};
-
-struct TAABuffer
-{
-    std::vector<sr::math::Matrix4x4> prevModels;
-    sr::math::Matrix4x4 prevView = sr::math::CreateIdentityMatrix();
-    sr::math::Matrix4x4 prevProj = sr::math::CreateIdentityMatrix();
-    sr::math::Matrix4x4 jitter = sr::math::CreateIdentityMatrix();
-    uint32_t count = 0;
 };
 
 static const uint8_t RENDER_PASS_MAX_SUBPASS = 4;
@@ -232,4 +187,48 @@ struct Pipeline
     RenderPass toneMapping;
     RenderPass taa;
     RenderPass debug;
+};
+
+struct TAABuffer
+{
+    std::vector<sr::math::Matrix4x4> prevModels;
+    sr::math::Matrix4x4 prevView = sr::math::CreateIdentityMatrix();
+    sr::math::Matrix4x4 prevProj = sr::math::CreateIdentityMatrix();
+    sr::math::Matrix4x4 jitter = sr::math::CreateIdentityMatrix();
+    uint32_t count = 0;
+};
+
+struct Camera
+{
+    sr::math::Matrix4x4 proj = sr::math::CreateIdentityMatrix();
+    sr::math::Matrix4x4 view = sr::math::CreateIdentityMatrix();
+    sr::math::Vec3 pos = {};
+    float xWorldAngle = 0;
+    float yWorldAngle = 0;
+    float near = 0;
+    float far = 0;
+    float fov = 0;
+    float aspect = 0;
+};
+
+struct RenderModel
+{
+    std::vector<uint32_t> vbos = {};
+    GLuint indexBuffer = 0;
+    GLuint vertexArrayObject = 0;
+    GLuint albedoTexture = 0;
+    GLuint normalTexture = 0;
+    GLuint bumpTexture = 0;
+    GLuint metallicTexture = 0;
+    GLuint roughnessTexture = 0;
+    uint32_t indexCount = 0;
+    sr::math::Matrix4x4 model = sr::math::CreateIdentityMatrix();
+    sr::math::Vec3 color = {0.5f, 0.5f, 0.5f};
+    GLuint debugRenderModel = 0;
+};
+
+struct DirectionalLightSource
+{
+    sr::math::Matrix4x4 projection;
+    sr::math::Matrix4x4 view;
 };

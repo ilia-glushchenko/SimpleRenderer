@@ -12,6 +12,8 @@ layout (location = 22) uniform uint uBumpMappingEnabledUint;
 layout (location = 23) uniform float uBumpMapScaleFactorFloat;
 layout (location = 24) uniform vec3 uCameraPos;
 layout (location = 25) uniform vec3 uPointLightPos;
+layout (location = 26) uniform uint uDebugRenderModeAvailableUint;
+layout (location = 27) uniform vec3 uPointLightPosVec3Array[5];
 
 layout (binding = 0) uniform sampler2D uShadowMapSampler2D;
 layout (binding = 1) uniform sampler2D uAlbedoMapSampler2D;
@@ -146,6 +148,13 @@ float CookTorance(vec3 v, vec3 n, vec3 l, float ro)
     return (F * G2 * D) / (4 * abs(dot(n, l)) * abs(dot(n, v)));
 }
 
+vec3 ShirleyFresnelSubSurfaceAlbedo(float F0, vec3 ssAlbedo, vec3 v, vec3 n, vec3 l)
+{
+    return 21.f / (20.f * PI) * (1 - F0) * ssAlbedo
+        * (1 - pow(1 - max(dot(n, l), 0), 5))
+        * (1 - pow(1 - max(dot(n, v), 0), 5));
+}
+
 float LightFalloffWindowingFunction(float r0, float rMin, float rMax, float r)
 {
     return pow(r0 / max(r, rMin), 2) * pow(max(1 - pow(r / rMax, 4), 0), 2);
@@ -153,31 +162,38 @@ float LightFalloffWindowingFunction(float r0, float rMin, float rMax, float r)
 
 vec3 CalculateRadiance(float depth, vec2 uv, vec3 n, vec3 shadowPosMVP, mat3 TBN)
 {
-    vec3 view = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
+    vec3 radiance = vec3(0);
 
-    if (bool(uBumpMapAvailableUint) && bool(uBumpMappingEnabledUint)) {
-        float h = AnisatropicTextureSample(uBumpMapSampler2D, uv).r;
-        uv = uv + h * (TBN * view.xyz).xy * uBumpMapScaleFactorFloat;
+    uint i = 1;
+    //for (uint i = 0; i < 13; i+=5)
+    {
+        vec3 view = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
+
+        if (bool(uBumpMapAvailableUint) && bool(uBumpMappingEnabledUint)) {
+            float h = AnisatropicTextureSample(uBumpMapSampler2D, uv).r;
+            uv = uv + h * (TBN * view.xyz).xy * uBumpMapScaleFactorFloat;
+        }
+
+        vec3 ssAlbedo = AnisatropicTextureSample(uAlbedoMapSampler2D, uv).rgb;
+        vec3 normal = normalize((AnisatropicTextureSample(uNormalMapSampler2D, uv).xyz * 2) - 1);
+        normal = normalize(n + TBN * normal);
+        normal = n;
+        float ro = bool(uRoughnessMapAvailableUint) ? AnisatropicTextureSample(uRoughnessSampler2D, uv).r : 1;
+
+        float fSpecDL = 0;
+        if (bool(uShadowMappingEnabledUint) && abs(shadowPosMVP.z) < depth - 0.45f) {
+            fSpecDL = CookTorance(view, normal, directionalLightDir, ro);
+        }
+
+        vec3 pointLightDir = -normalize(positionWorld.xyz / positionWorld.w - uPointLightPosVec3Array[i]);
+        vec3 diff = ShirleyFresnelSubSurfaceAlbedo(FresnelSchlickF0(AirIOR, MarbleIOR), ssAlbedo, view, normal, pointLightDir);
+        float fSpecPL = CookTorance(view, normal, pointLightDir, ro);
+        float d = distance(uPointLightPosVec3Array[i], positionWorld.xyz / positionWorld.w);
+        vec3 spec = LightFalloffWindowingFunction(1000, 1, 10000, d) *
+             PI * fSpecPL * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0);
+
+        radiance += diff + spec;
     }
-
-    vec3 ssAlbedo = AnisatropicTextureSample(uAlbedoMapSampler2D, uv).rgb;
-    vec3 normal = normalize((AnisatropicTextureSample(uNormalMapSampler2D, uv).xyz * 2) - 1);
-    normal = normalize(n + TBN * normal);
-    normal = n;
-    float ro = bool(uRoughnessMapAvailableUint) ? AnisatropicTextureSample(uRoughnessSampler2D, uv).r : 1;
-
-    float fSpecDL = 0;
-    if (bool(uShadowMappingEnabledUint) && abs(shadowPosMVP.z) < depth - 0.45f) {
-        fSpecDL = CookTorance(view, normal, directionalLightDir, ro);
-    }
-
-    vec3 pointLightDir = -normalize(positionWorld.xyz / positionWorld.w - uPointLightPos);
-    vec3 diff = (1 - FresnelSchlick(view, pointLightDir)) * ssAlbedo / PI;
-    float fSpecPL = CookTorance(view, normal, pointLightDir, ro);
-    vec3 spec = PI * fSpecPL * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0);
-
-    float d = distance(uPointLightPos, positionWorld.xyz / positionWorld.w);
-    vec3 radiance = LightFalloffWindowingFunction(400, 1, 10000, d) * (diff + spec);
 
     return radiance;
 }
@@ -196,8 +212,13 @@ void main()
 
     if (uRenderModeUint == 0) // Full
     {
-        vec3 radiance = CalculateRadiance(depth, uv, n, shadowPosMVP, TBN);
-        outColor = vec4(radiance, 1);
+        if (bool(uDebugRenderModeAvailableUint)){
+            outColor = vec4(uColor, 1);
+        }
+        else{
+            vec3 radiance = CalculateRadiance(depth, uv, n, shadowPosMVP, TBN);
+            outColor = vec4(radiance, 1);
+        }
     }
     else if (uRenderModeUint == 1) // Normal
     {

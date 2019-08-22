@@ -30,6 +30,6 @@ void main()
     outColor = texture(uTaaDrawTextureSampler2D, uv);
     // outColor = vec4(ACESFitted(texture(uTaaDrawTextureSampler2D, uv).rgb), 1);
     //outColor = vec4(texture(uTaaVelocityTextureSampler2D, uv).rgb, 1);
-    //outColor = vec4((normalize(texture(uTaaVelocityTextureSampler2D, uv).rgb) + 1) * 0.5, 1);
+    //outColor = vec4((abs(texture(uTaaVelocityTextureSampler2D, uv).rgb) + 1) * 0.5, 1);
     //outColor = vec4(texture(uToneMappingTextureSampler2D, uv).rgb, 1);
 }

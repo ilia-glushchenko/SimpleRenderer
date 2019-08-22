@@ -197,19 +197,19 @@ void UpdateGlobalUniforms(ShaderProgram const &program)
 {
     for (auto &uniform : program.ui32)
     {
-        glUniform1ui(uniform.location, *uniform.data);
+        glUniform1uiv(uniform.location, uniform.count, uniform.data);
     }
     for (auto &uniform : program.f1)
     {
-        glUniform1f(uniform.location, *uniform.data);
+        glUniform1fv(uniform.location, uniform.count, uniform.data);
     }
     for (auto &uniform : program.f3)
     {
-        glUniform3fv(uniform.location, 1, uniform.data);
+        glUniform3fv(uniform.location, uniform.count, uniform.data);
     }
     for (auto &uniform : program.f16)
     {
-        glUniformMatrix4fv(uniform.location, 1, GL_TRUE, uniform.data);
+        glUniformMatrix4fv(uniform.location, uniform.count, GL_TRUE, uniform.data);
     }
 }
 

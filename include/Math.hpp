@@ -53,6 +53,11 @@ struct Vec3
         float data[3];
     };
 
+    Vec3 &operator+=(Vec3 const &other)
+    {
+        return *this = *this + other;
+    }
+
     constexpr Vec3 operator+(Vec3 const &other) const
     {
         return {other.x + x, other.y + y, other.z + z};
@@ -75,8 +80,15 @@ struct Vec4
         {
             float r, g, b, a;
         };
+        Vec2 xy;
+        Vec3 xyz;
         float data[4];
     };
+
+    Vec4 &operator*=(float s)
+    {
+        return *this = *this * s;
+    }
 
     constexpr Vec4 operator-() const
     {
@@ -262,7 +274,7 @@ constexpr Matrix4x4 CreateChangeOfBasisMatrix(math::Vec3 dir, math::Vec3 up, mat
         0, 0, 0, 1};
 }
 
-Matrix4x4 CreateScaleMatrix(float x, float y, float z)
+constexpr Matrix4x4 CreateScaleMatrix(float x, float y, float z)
 {
     return {
         x, 0, 0, 0,
@@ -271,7 +283,7 @@ Matrix4x4 CreateScaleMatrix(float x, float y, float z)
         0, 0, 0, 1};
 }
 
-Matrix4x4 CreateScaleMatrix(float s)
+constexpr Matrix4x4 CreateScaleMatrix(float s)
 {
     return CreateScaleMatrix(s, s, s);
 }
@@ -312,13 +324,18 @@ Matrix4x4 CreateRotationMatrixZ(float a)
         0, 0, 0, 1};
 }
 
-Matrix4x4 CreateTranslationMatrix(float x, float y, float z)
+constexpr Matrix4x4 CreateTranslationMatrix(float x, float y, float z)
 {
     return {
         1, 0, 0, x,
         0, 1, 0, y,
         0, 0, 1, z,
         0, 0, 0, 1};
+}
+
+constexpr Matrix4x4 CreateTranslationMatrix(Vec3 vec)
+{
+    return CreateTranslationMatrix(vec.x, vec.y, vec.z);
 }
 
 float CreateUniformRandomFloat(float min, float max)

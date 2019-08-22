@@ -285,20 +285,18 @@ bool LoadOBJ(std::string const &folder, std::string const &filename, std::vector
 
 std::string LoadFile(char const *filepath)
 {
-    std::ifstream t(filepath);
-    if (!t)
+    std::ifstream inFile;
+    inFile.open(filepath);
+    if (!inFile)
     {
         std::cerr << "Failed to open file: " << filepath << std::endl;
         return {};
     }
 
-    t.seekg(0, std::ios::end);
-    size_t size = t.tellg();
-    std::string buffer(size, ' ');
-    t.seekg(0);
-    t.read(&buffer[0], size);
+    std::stringstream strStream;
+    strStream << inFile.rdbuf(); 
 
-    return buffer;
+    return strStream.str();
 }
 
 std::vector<BufferDescriptor> CreateBufferDescriptors(Geometry &model)

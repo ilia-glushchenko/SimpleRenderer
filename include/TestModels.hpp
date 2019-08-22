@@ -113,6 +113,8 @@ static std::vector<AttributeDescriptor> const g_shaderAttributesPositionNormalUV
 
 static RenderModel g_quadWallRenderModel;
 
+static RenderModel g_boxRenderModel;
+
 constexpr uint32_t g_taaSubPixelSampleCount = 16;
 const sr::math::Vec2 g_taaSubPixelSamples[16] = {
     sr::math::Vec2{-8.0f, 0.0f} / 8.0f,

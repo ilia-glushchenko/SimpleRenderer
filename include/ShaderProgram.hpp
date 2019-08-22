@@ -84,7 +84,7 @@ GLuint CreateShaderProgram(GLuint vertexShader, GLuint fragmentShader)
 }
 
 template <typename T, typename D>
-std::vector<T> CreateUniformBinding(GLuint program, std::vector<D *> const &data, std::vector<const char *> const &names)
+std::vector<T> CreateUniformBinding(GLuint program, std::vector<D *> const &data, std::vector<const char *> const &names, std::vector<int32_t> const &counts)
 {
     assert(data.size() == names.size());
 
@@ -92,7 +92,7 @@ std::vector<T> CreateUniformBinding(GLuint program, std::vector<D *> const &data
 
     for (uint32_t i = 0; i < names.size(); ++i)
     {
-        bindings.push_back({static_cast<int32_t>(glGetUniformLocation(program, names[i])), data[i]});
+        bindings.push_back({static_cast<int32_t>(glGetUniformLocation(program, names[i])), data[i], counts[i]});
 
         if (bindings.back().location == -1)
         {
@@ -154,10 +154,10 @@ ShaderProgram CreateShaderProgram(char const *vert, char const *frag)
 
 void CreateShaderProgramUniformBindings(ShaderProgram &program, UniformsDescriptor const &desc)
 {
-    program.ui32 = CreateUniformBinding<UniformBindingUI32>(program.handle, desc.ui32.data, desc.ui32.names);
-    program.f1 = CreateUniformBinding<UniformBindingF1>(program.handle, desc.float1.data, desc.float1.names);
-    program.f3 = CreateUniformBinding<UniformBindingV3F>(program.handle, desc.float3.data, desc.float3.names);
-    program.f16 = CreateUniformBinding<UniformBindingM4F>(program.handle, desc.mat4.data, desc.mat4.names);
+    program.ui32 = CreateUniformBinding<UniformBindingUI32>(program.handle, desc.ui32.data, desc.ui32.names, desc.ui32.counts);
+    program.f1 = CreateUniformBinding<UniformBindingF1>(program.handle, desc.float1.data, desc.float1.names, desc.float1.counts);
+    program.f3 = CreateUniformBinding<UniformBindingV3F>(program.handle, desc.float3.data, desc.float3.names, desc.float3.counts);
+    program.f16 = CreateUniformBinding<UniformBindingM4F>(program.handle, desc.mat4.data, desc.mat4.names, desc.mat4.counts);
     program.ui32Array = CreateUniformBinding<UniformBindingUI32Array>(program.handle, desc.ui32Array.data, desc.ui32Array.names, desc.ui32Array.offsets, desc.ui32Array.strides);
     program.f1Array = CreateUniformBinding<UniformBindingF1Array>(program.handle, desc.float1Array.data, desc.float1Array.names, desc.float1Array.offsets, desc.float1Array.strides);
     program.f3Array = CreateUniformBinding<UniformBindingV3FArray>(program.handle, desc.float3Array.data, desc.float3Array.names, desc.float3Array.offsets, desc.float3Array.strides);
