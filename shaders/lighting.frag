@@ -11,7 +11,6 @@ layout (location = 21) uniform uint uRoughnessMapAvailableUint;
 layout (location = 22) uniform uint uBumpMappingEnabledUint;
 layout (location = 23) uniform float uBumpMapScaleFactorFloat;
 layout (location = 24) uniform vec3 uCameraPos;
-layout (location = 25) uniform vec3 uPointLightPos;
 layout (location = 26) uniform uint uDebugRenderModeAvailableUint;
 layout (location = 27) uniform vec3 uPointLightPosVec3Array[5];
 
@@ -32,9 +31,10 @@ layout (location = 6) in vec2 inUv;
 
 layout (location = 0) out vec4 outColor;
 
-const float MipBias = 0;
+const float MipBias = -1.0;
 const float PI = 3.1415926535897932384626433832795;
-const vec3 SUN_LIGHT_COLOR = vec3(252.0 / 255.0, 212/ 255.0, 64 / 255.0); // Sun
+//const vec3 SUN_LIGHT_COLOR = vec3(252.0 / 255.0, 212/ 255.0, 64 / 255.0); // Sun
+const vec3 SUN_LIGHT_COLOR = vec3(1, 1, 1); // Sun
 const vec3 POINT_LIGHT_COLOR = vec3(255.0 / 255.0, 209/ 255.0, 163 / 255.0); // 4000k
 const float SilkIOR = 1.5605f;
 const float MarbleIOR = 1.486f;
@@ -42,19 +42,27 @@ const float AirIOR = 1.00029f;
 
 vec3 AnisatropicTextureSample(sampler2D samp, vec2 sampleUV)
 {
-    vec2 dx = dFdxFine(sampleUV.xy) * 0.25; // horizontal offset
-    vec2 dy = dFdyFine(sampleUV.xy) * 0.25; // vertical offset
-    // supersampled 2x2 ordered grid
-    vec3 col = vec3(0);
-    col += texture(samp, sampleUV.xy + dx + dy, MipBias).rgb;
-    col += texture(samp, sampleUV.xy - dx + dy, MipBias).rgb;
-    col += texture(samp, sampleUV.xy + dx - dy, MipBias).rgb;
-    col += texture(samp, sampleUV.xy - dx - dy, MipBias).rgb;
-    col *= 0.25;
+    // per pixel partial derivatives
+    vec2 dx = dFdxFine(sampleUV.xy);
+    vec2 dy = dFdyFine(sampleUV.xy);
 
-    //return col;
+    // rotated grid uv offsets
+    vec2 uvOffsets = vec2(0.125, 0.375);
+    vec4 offsetUV = vec4(0.0, 0.0, 0.0, MipBias);
 
-    return texture(samp, sampleUV, MipBias).rgb;
+    // supersampled using 2x2 rotated grid
+    vec3 color = vec3(0);
+    offsetUV.xy = sampleUV.xy + uvOffsets.x * dx + uvOffsets.y * dy;
+    color += texture(samp, offsetUV.xy, MipBias).rgb;
+    offsetUV.xy = sampleUV.xy - uvOffsets.x * dx - uvOffsets.y * dy;
+    color += texture(samp, offsetUV.xy, MipBias).rgb;
+    offsetUV.xy = sampleUV.xy + uvOffsets.y * dx - uvOffsets.x * dy;
+    color += texture(samp, offsetUV.xy, MipBias).rgb;
+    offsetUV.xy = sampleUV.xy - uvOffsets.y * dx + uvOffsets.x * dy;
+    color += texture(samp, offsetUV.xy, MipBias).rgb;
+    color *= 0.25;
+
+    return color;
 }
 
 mat3 CalculateTBNMatrix( vec3 N, vec3 p, vec2 pUV )
@@ -145,7 +153,7 @@ float CookTorance(vec3 v, vec3 n, vec3 l, float ro)
     );
     float F = FresnelSchlick(FresnelSchlickF0(AirIOR, MarbleIOR), h, l);
 
-    return (F * G2 * D) / (4 * abs(dot(n, l)) * abs(dot(n, v)));
+    return (F * G2 * D) / (4 * max(abs(dot(n, l)), 1e-5) * max(abs(dot(n, v)), 1e-5));
 }
 
 vec3 ShirleyFresnelSubSurfaceAlbedo(float F0, vec3 ssAlbedo, vec3 v, vec3 n, vec3 l)
@@ -164,8 +172,7 @@ vec3 CalculateRadiance(float depth, vec2 uv, vec3 n, vec3 shadowPosMVP, mat3 TBN
 {
     vec3 radiance = vec3(0);
 
-    uint i = 1;
-    //for (uint i = 0; i < 13; i+=5)
+    for (uint i = 0; i < 5; i+=2)
     {
         vec3 view = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
 
@@ -177,7 +184,6 @@ vec3 CalculateRadiance(float depth, vec2 uv, vec3 n, vec3 shadowPosMVP, mat3 TBN
         vec3 ssAlbedo = AnisatropicTextureSample(uAlbedoMapSampler2D, uv).rgb;
         vec3 normal = normalize((AnisatropicTextureSample(uNormalMapSampler2D, uv).xyz * 2) - 1);
         normal = normalize(n + TBN * normal);
-        normal = n;
         float ro = bool(uRoughnessMapAvailableUint) ? AnisatropicTextureSample(uRoughnessSampler2D, uv).r : 1;
 
         float fSpecDL = 0;
@@ -190,9 +196,11 @@ vec3 CalculateRadiance(float depth, vec2 uv, vec3 n, vec3 shadowPosMVP, mat3 TBN
         float fSpecPL = CookTorance(view, normal, pointLightDir, ro);
         float d = distance(uPointLightPosVec3Array[i], positionWorld.xyz / positionWorld.w);
         vec3 spec = LightFalloffWindowingFunction(1000, 1, 10000, d) *
-             PI * fSpecPL * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0);
+            PI * fSpecPL * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0);
+        vec3 specDL = LightFalloffWindowingFunction(1000, 1, 10000, 800) *
+            PI * fSpecDL * SUN_LIGHT_COLOR * max(dot(n, directionalLightDir), 0);
 
-        radiance += diff + spec;
+        radiance += diff + spec + specDL;
     }
 
     return radiance;

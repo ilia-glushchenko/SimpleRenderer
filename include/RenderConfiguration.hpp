@@ -81,11 +81,12 @@ void ConfigureGL()
 {
     glEnable(GL_DEBUG_OUTPUT);
     glDebugMessageCallback(::MessageCallback, 0);
+
     glClearColor(1, 1, 1, 1);
     glClearDepth(1.0f);
-    glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
+
     glEnable(GL_DEPTH_TEST);
+
     glFrontFace(GL_CW);
     glCullFace(GL_BACK);
 }

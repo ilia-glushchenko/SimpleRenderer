@@ -40,8 +40,7 @@ sr::math::Vec3 g_pointLights[g_pointLightCount] = {
     {-700, 200, -45},
     {0, 200, -45},
     {700, 200, -45},
-    {1200, 200, -45}};
-float g_lightPosition[3] = {0, 100, -45};
+    {1100, 200, -45}};
 char const *g_disableEnableList[2] = {"Disabled", "Enabled"};
 enum class eRenderMode : uint32_t
 {
@@ -211,9 +210,8 @@ void DrawUI(GLFWwindow *window)
     ImGui::Combo("Shadows", reinterpret_cast<int *>(&g_shadowMapsMode), g_disableEnableList, IM_ARRAYSIZE(g_disableEnableList));
     ImGui::Combo("Bump Mapping", reinterpret_cast<int *>(&g_bumpMappingEnabled), g_disableEnableList, IM_ARRAYSIZE(g_disableEnableList));
     ImGui::SliderFloat("Bumpmap scale factor", &g_bumpMapScaleFactor, 0.0001f, 0.01f, "%.5f");
-    ImGui::InputFloat3("Light pos:", g_lightPosition, 1);
     ImGui::InputFloat3("Camera pos:", g_camera.pos.data, 1);
-    ImGui::InputFloat("Camera Y rad", &g_camera.yWorldAngle, 0.1f, 0.3f, 2);
+    ImGui::InputFloat2("Camera XY rads:", &g_camera.xWorldAngle, 1);
     ImGui::Text("Frame time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     ImGui::End();
@@ -256,7 +254,6 @@ std::vector<RenderModel> LoadModels(ShaderProgram const &program)
             sr::math::CreateScaleMatrix(10));
     }
 
-    if (false)
     {
         tinyobj::material_t material;
         material.diffuse_texname = "shfsaida_2K_Albedo.jpg";
@@ -290,6 +287,7 @@ PipelineShaderPrograms CreatePipelineShaderPrograms()
 {
     PipelineShaderPrograms desc;
 
+    desc.depthPrePass = CreateShaderProgram("shaders/depth_pre_pass.vert", "shaders/depth_pre_pass.frag");
     desc.shadowMapping = CreateShaderProgram("shaders/shadow_mapping.vert", "shaders/shadow_mapping.frag");
     desc.lighting = CreateShaderProgram("shaders/lighting.vert", "shaders/lighting.frag");
     desc.velocity = CreateShaderProgram("shaders/velocity.vert", "shaders/velocity.frag");
@@ -305,6 +303,28 @@ PipelineShaderPrograms CreatePipelineShaderPrograms()
 
 void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<RenderModel> const &models)
 {
+    {
+        CreateShaderProgramUniformBindings(
+            desc.depthPrePass,
+            UniformsDescriptor{
+                {},
+                {},
+                {},
+                UniformsDescriptor::MAT4{
+                    {"uJitMat", "uProjMat", "uViewMat"},
+                    {g_taaBuffer.jitter.data, g_camera.proj.data, g_camera.view.data},
+                    {1, 1, 1}},
+                {},
+                {},
+                {},
+                UniformsDescriptor::ArrayMAT4{
+                    {"uModelMat"},
+                    {reinterpret_cast<float const *>(models.data())},
+                    {offsetof(RenderModel, RenderModel::model)},
+                    {sizeof(RenderModel)}},
+            });
+    }
+
     {
         CreateShaderProgramUniformBindings(
             desc.shadowMapping,
@@ -347,11 +367,10 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                     {1}},
                 //float3
                 UniformsDescriptor::F3{
-                    {"uCameraPos", "uPointLightPos", "uPointLightPosVec3Array"},
+                    {"uCameraPos", "uPointLightPosVec3Array"},
                     {g_camera.pos.data,
-                     g_lightPosition,
                      g_pointLights[0].data},
-                    {1, 1, g_pointLightCount}},
+                    {1, g_pointLightCount}},
                 //mat4
                 UniformsDescriptor::MAT4{
                     {"uProjMat",
@@ -405,8 +424,14 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                 UniformsDescriptor::F1{},
                 UniformsDescriptor::F3{},
                 UniformsDescriptor::MAT4{
-                    {"uPrevViewMat4", "uPrevProjMat4", "uViewMat4", "uProjMat4"},
-                    {g_taaBuffer.prevView.data, g_taaBuffer.prevProj.data, g_camera.view.data, g_camera.proj.data},
+                    {"uPrevViewMat4",
+                     "uPrevProjMat4",
+                     "uViewMat4",
+                     "uProjMat4"},
+                    {g_taaBuffer.prevView.data,
+                     g_taaBuffer.prevProj.data,
+                     g_camera.view.data,
+                     g_camera.proj.data},
                     {1, 1, 1, 1},
                 },
                 UniformsDescriptor::ArrayUI32{},
@@ -443,17 +468,22 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
             UniformsDescriptor{
                 UniformsDescriptor::UI32{
                     {"uFrameCountUint"}, {&g_taaBuffer.count}, {1}},
-                UniformsDescriptor::F1{
-                    {"uNearFloat", "uFarFloat"}, {&g_camera.near, &g_camera.far}, {1, 1}},
+                UniformsDescriptor::F1{},
                 UniformsDescriptor::F3{},
                 UniformsDescriptor::MAT4{
-                    {"uViewMat", "uProjMat", "uJitterMat", "uPrevViewMat", "uPrevProjMat"},
+                    {"uViewMat",
+                     "uProjMat",
+                     "uJitterMat",
+                     "uPrevJitterMat",
+                     "uPrevViewMat",
+                     "uPrevProjMat"},
                     {g_camera.view.data,
                      g_camera.proj.data,
                      g_taaBuffer.jitter.data,
+                     g_taaBuffer.prevJitter.data,
                      g_taaBuffer.prevView.data,
                      g_taaBuffer.prevProj.data},
-                    {1, 1, 1, 1, 1}},
+                    {1, 1, 1, 1, 1, 1}},
                 UniformsDescriptor::ArrayUI32{},
                 UniformsDescriptor::ArrayF1{},
                 UniformsDescriptor::ArrayF3{},
@@ -479,12 +509,29 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
 
 void UpdateModels(std::vector<RenderModel> &models)
 {
-    //auto now = std::chrono::system_clock::now().time_since_epoch();
-    //uint64_t const time = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
-    //float const s = std::sin(time);
-    //models.back().model = sr::math::Mul(
-    //    sr::math::CreateTranslationMatrix(0, 0, (s > 0 ? -1.f : 1.f)),
-    //    models.back().model);
+    auto now = std::chrono::system_clock::now().time_since_epoch();
+    uint64_t const time = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
+    float const s = std::sin(static_cast<float>(time));
+    models.back().model = sr::math::Mul(
+        sr::math::CreateRotationMatrixY(0.01f),
+        models.back().model);
+}
+
+void RenderPassDepthPrePass(Pipeline &pipeline, std::vector<RenderModel> const &models)
+{
+    g_camera.view = CreateViewMatrix(g_camera.pos, g_camera.xWorldAngle, g_camera.yWorldAngle);
+    g_camera.proj = sr::math::CreatePerspectiveProjectionMatrix(
+        g_camera.near, g_camera.far, g_camera.fov, g_camera.aspect);
+    const uint32_t taaSampleIndex = g_taaBuffer.count % g_taaSubPixelSampleCount;
+
+    int32_t const width = pipeline.depthPrePass.width;
+    int32_t const height = pipeline.depthPrePass.height;
+    sr::math::Vec2 const sample = g_taaSubPixelSamples[taaSampleIndex];
+
+    g_taaBuffer.prevJitter = g_taaBuffer.jitter;
+    g_taaBuffer.jitter = sr::math::CreateTranslationMatrix({sample.x / width, sample.y / height});
+
+    ExecuteRenderPass(pipeline.depthPrePass, models.data(), models.size());
 }
 
 void RenderPassShadowMap(Pipeline &pipeline, std::vector<RenderModel> const &models)
@@ -492,8 +539,6 @@ void RenderPassShadowMap(Pipeline &pipeline, std::vector<RenderModel> const &mod
     //static std::string message = {"RenderPassShadowMap"};
     //glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION,
     //                     message.length(), message.c_str());
-
-    g_camera.view = CreateViewMatrix(g_camera.pos, g_camera.xWorldAngle, g_camera.yWorldAngle);
 
     ExecuteRenderPass(pipeline.shadowMapping, models.data(), models.size());
 }
@@ -503,12 +548,6 @@ void RenderPassLighting(Pipeline &pipeline, std::vector<RenderModel> const &mode
     //static std::string message = {"RenderPassLighting"};
     //glDebugMessageInsert(GL_DEBUG_SOURCE_APPLICATION, GL_DEBUG_TYPE_MARKER, 0, GL_DEBUG_SEVERITY_NOTIFICATION,
     //                     message.length(), message.c_str());
-
-    g_camera.view = CreateViewMatrix(g_camera.pos, g_camera.xWorldAngle, g_camera.yWorldAngle);
-    g_camera.proj = sr::math::CreatePerspectiveProjectionMatrix(g_camera.near, g_camera.far, g_camera.fov, g_camera.aspect);
-    const uint32_t taaSampleIndex = g_taaBuffer.count % g_taaSubPixelSampleCount;
-    g_taaBuffer.jitter._14 = g_taaSubPixelSamples[taaSampleIndex].x / pipeline.lighting.width;
-    g_taaBuffer.jitter._24 = g_taaSubPixelSamples[taaSampleIndex].y / pipeline.lighting.height;
 
     ExecuteRenderPass(pipeline.lighting, models.data(), models.size());
 }
@@ -585,6 +624,8 @@ void MainLoop(GLFWwindow *window)
 
         if (g_isHotRealoadRequired)
         {
+            DeleteRenderPipeline(pipeline);
+
             programs = CreatePipelineShaderPrograms();
             CreatePipelineUniformBindngs(programs, models);
             pipeline = CreateRenderPipeline(programs, swapchainFramebufferWidth, swapchainFramebufferHeight);
@@ -597,6 +638,7 @@ void MainLoop(GLFWwindow *window)
         }
 
         UpdateModels(models);
+        RenderPassDepthPrePass(pipeline, models);
         RenderPassShadowMap(pipeline, models);
         RenderPassLighting(pipeline, models);
         RenderPassVelocity(pipeline, models);

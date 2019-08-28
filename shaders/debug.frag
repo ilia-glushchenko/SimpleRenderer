@@ -2,7 +2,7 @@
 
 layout (location = 20, binding = 0) uniform sampler2D uLightingColorTextureSampler2D;
 layout (location = 21, binding = 1) uniform sampler2D uLightingDepthTextureSampler2D;
-layout (location = 24, binding = 2) uniform sampler2D uTaaVelocityTextureSampler2D;
+layout (location = 24, binding = 2) uniform sampler2D uVelocityTextureSampler2D;
 layout (location = 25, binding = 3) uniform sampler2D uToneMappingTextureSampler2D;
 layout (location = 22, binding = 4) uniform sampler2D uTaaHistoryTextureSampler2D;
 layout (location = 23, binding = 5) uniform sampler2D uTaaDrawTextureSampler2D;
@@ -16,20 +16,25 @@ layout (location = 0) out vec4 outColor;
 void main()
 {
     vec3 lightingColor = texture(uLightingColorTextureSampler2D, uv).rgb;
+    vec3 toneMappedColor = texture(uToneMappingTextureSampler2D, uv).rgb;
     vec3 taaColor = texture(uTaaDrawTextureSampler2D, uv).rgb;
 
-    outColor = distance(lightingColor, taaColor) > 0.1f
-        ? vec4(1, 0, 0, 1) : vec4(0, 1, 0.5, 1);
+    // outColor = distance(toneMappedColor, taaColor) > 0.1f
+    //    ? vec4(1, 0, 0, 1) : vec4(0, 1, 0.5, 1);
 
-    //outColor = vec4(abs(texture(uLightingColorTextureSampler2D, uv).rgb
+    //outColor = vec4((toneMappedColor - taaColor) * 1000f, 1);
+
+    //outColor = vec4(texture(uLightingColorTextureSampler2D, uv).rgb, 1);
     //    - texture(uLightingColorNoToneTextureSampler2D, uv).rgb), 1);
     // outColor = vec4(mix(
     //    texture(uLightingColorTextureSampler2D, uv).rgb,
-    //    texture(uTaaVelocityTextureSampler2D, uv).rgb, 0.5), 1);
+    //    texture(uVelocityTextureSampler2D, uv).rgb, 0.5), 1);
     //outColor = texture(uTaaHistoryTextureSampler2D, uv);
     outColor = texture(uTaaDrawTextureSampler2D, uv);
-    // outColor = vec4(ACESFitted(texture(uTaaDrawTextureSampler2D, uv).rgb), 1);
-    //outColor = vec4(texture(uTaaVelocityTextureSampler2D, uv).rgb, 1);
-    //outColor = vec4((abs(texture(uTaaVelocityTextureSampler2D, uv).rgb) + 1) * 0.5, 1);
-    //outColor = vec4(texture(uToneMappingTextureSampler2D, uv).rgb, 1);
+    // outColor = vec4(vec3(length(texture(uVelocityTextureSampler2D, uv).rgb)) * 1000, 1);
+    // outColor = vec4(vec3(length(abs(texture(uVelocityTextureSampler2D, uv).rgb))), 1);
+    //outColor = vec4(
+    //    abs(texture(uToneMappingTextureSampler2D, uv).rgb - texture(uTaaDrawTextureSampler2D, uv).rgb),
+    //    1);
+    //outColor = vec4(vec3(pow(texture(uLightingDepthTextureSampler2D, uv).r, 1024)), 1);
 }

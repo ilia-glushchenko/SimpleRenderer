@@ -87,6 +87,7 @@ template <typename T, typename D>
 std::vector<T> CreateUniformBinding(GLuint program, std::vector<D *> const &data, std::vector<const char *> const &names, std::vector<int32_t> const &counts)
 {
     assert(data.size() == names.size());
+    assert(data.size() == counts.size());
 
     std::vector<T> bindings;
 
@@ -112,6 +113,8 @@ std::vector<T> CreateUniformBinding(
     std::vector<uint32_t> const &strides)
 {
     assert(data.size() == names.size());
+    assert(data.size() == offsets.size());
+    assert(data.size() == strides.size());
 
     std::vector<T> bindings;
 

@@ -33,9 +33,19 @@ struct Vec2
         return {-x, -y};
     }
 
+    constexpr Vec2 operator*(float s) const
+    {
+        return {x * s, y * s};
+    }
+
     constexpr Vec2 operator/(float s) const
     {
         return {x / s, y / s};
+    }
+
+    Vec2 &operator*=(float s)
+    {
+        return *this = *this * s;
     }
 };
 

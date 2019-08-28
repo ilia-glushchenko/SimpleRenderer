@@ -125,6 +125,7 @@ struct Texture2DDescriptor
     GLenum tWrap = GL_REPEAT;
     GLenum minFilter = GL_LINEAR;
     GLenum magFilter = GL_LINEAR;
+    float maxAnisatropy = 1.f;
 };
 
 static const uint8_t RENDER_PASS_MAX_SUBPASS = 4;
@@ -151,6 +152,11 @@ struct SubPassDescriptor
     uint8_t dependencyCount = 0;
     SubPassAttachmentDescriptor attachments[RENDER_PASS_MAX_ATTACHMENTS] = {};
     uint8_t attachmentCount = 0;
+    sr::math::Vec4 clearColor = {0, 0, 0, 0};
+    float clearDepth = 1.0f;
+    ClearBufferMask clearBufferMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT;
+    GLboolean depthMask = GL_TRUE;
+    GLenum depthFunc = GL_LESS;
 };
 
 struct SubPass
@@ -171,6 +177,7 @@ struct RenderPass
 
 struct PipelineShaderPrograms
 {
+    ShaderProgram depthPrePass;
     ShaderProgram shadowMapping;
     ShaderProgram lighting;
     ShaderProgram velocity;
@@ -181,6 +188,7 @@ struct PipelineShaderPrograms
 
 struct Pipeline
 {
+    RenderPass depthPrePass;
     RenderPass shadowMapping;
     RenderPass lighting;
     RenderPass velocity;
@@ -194,6 +202,7 @@ struct TAABuffer
     std::vector<sr::math::Matrix4x4> prevModels;
     sr::math::Matrix4x4 prevView = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 prevProj = sr::math::CreateIdentityMatrix();
+    sr::math::Matrix4x4 prevJitter = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 jitter = sr::math::CreateIdentityMatrix();
     uint32_t count = 0;
 };

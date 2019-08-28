@@ -10,7 +10,10 @@
 
 #include <cassert>
 
-RenderPass CreateRenderPass(SubPassDescriptor const *desc, uint8_t count, ShaderProgram program, int32_t width, int32_t height)
+RenderPass CreateRenderPass(
+    SubPassDescriptor const *desc, uint8_t count,
+    ShaderProgram program,
+    int32_t width, int32_t height)
 {
     assert(desc != nullptr);
     assert(count < RENDER_PASS_MAX_SUBPASS);
@@ -65,10 +68,19 @@ RenderPass CreateRenderPass(SubPassDescriptor const *desc, uint8_t count, Shader
 
 void DeleteRenderPass(RenderPass &pass)
 {
-    DeleteShaderProgram(pass.program);
-    for (uint8_t i = 0; i < pass.subPassCount; ++i)
+    glDeleteProgram(pass.program.handle);
+    glDeleteShader(pass.program.vertexShaderHandle);
+    glDeleteShader(pass.program.fragmentShaderHandle);
+
+    for (uint32_t i = 0; i < pass.subPassCount; ++i)
     {
-        glDeleteFramebuffers(1, &(pass.subPasses[i].fbo));
+        // Free attachments
+        for (uint32_t j = 0; j < pass.subPasses[i].desc.attachmentCount; ++j)
+        {
+            glDeleteTextures(1, &pass.subPasses[i].desc.attachments[j].handle);
+        }
+
+        glDeleteFramebuffers(1, &pass.subPasses[i].fbo);
     }
 }
 
@@ -82,7 +94,24 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.attachments[0] = SubPassAttachmentDescriptor{
             GL_DEPTH_ATTACHMENT,
             GL_TEXTURE_2D,
+            CreateDepthTexture(width, height)};
+        desc.depthMask = GL_TRUE;
+        desc.depthFunc = GL_LESS;
+        desc.clearBufferMask = GL_DEPTH_BUFFER_BIT;
+
+        pipeline.depthPrePass = CreateRenderPass(&desc, 1, programs.depthPrePass, width, height);
+    }
+
+    {
+        SubPassDescriptor desc;
+        desc.attachmentCount = 1;
+        desc.attachments[0] = SubPassAttachmentDescriptor{
+            GL_DEPTH_ATTACHMENT,
+            GL_TEXTURE_2D,
             CreateDepthTexture(4096, 4096)};
+        desc.depthMask = GL_TRUE;
+        desc.depthFunc = GL_LESS;
+        desc.clearBufferMask = GL_DEPTH_BUFFER_BIT;
 
         pipeline.shadowMapping = CreateRenderPass(&desc, 1, programs.shadowMapping, 4096, 4096);
     }
@@ -98,7 +127,11 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.attachments[0] = SubPassAttachmentDescriptor{
             GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
         desc.attachments[1] = SubPassAttachmentDescriptor{
-            GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, CreateDepthTexture(width, height)};
+            GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, pipeline.depthPrePass.subPasses[0].desc.attachments[0].handle};
+        desc.depthMask = GL_FALSE;
+        desc.depthFunc = GL_EQUAL;
+        desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
+        desc.clearColor = {1, 1, 1, 1};
 
         pipeline.lighting = CreateRenderPass(&desc, 1, programs.lighting, width, height);
     }
@@ -106,9 +139,14 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
     {
         SubPassDescriptor desc;
 
-        desc.attachmentCount = 1;
+        desc.attachmentCount = 2;
         desc.attachments[0] = SubPassAttachmentDescriptor{
             GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
+        desc.attachments[1] = SubPassAttachmentDescriptor{
+            GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, pipeline.depthPrePass.subPasses[0].desc.attachments[0].handle};
+        desc.depthMask = GL_FALSE;
+        desc.depthFunc = GL_EQUAL;
+        desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
 
         pipeline.velocity = CreateRenderPass(&desc, 1, programs.velocity, width, height);
     }
@@ -123,6 +161,9 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.attachmentCount = 1;
         desc.attachments[0] = SubPassAttachmentDescriptor{
             GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
+        desc.depthMask = GL_FALSE;
+        desc.depthFunc = GL_ALWAYS;
+        desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
 
         pipeline.toneMapping = CreateRenderPass(&desc, 1, programs.toneMapping, width, height);
     }
@@ -143,6 +184,9 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
             GL_TEXTURE3, GL_TEXTURE_2D, pipeline.velocity.subPasses[0].desc.attachments[0].handle};
         desc[0].attachmentCount = 1;
         desc[0].attachments[0] = SubPassAttachmentDescriptor{GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture1};
+        desc[0].depthMask = GL_FALSE;
+        desc[0].depthFunc = GL_ALWAYS;
+        desc[0].clearBufferMask = GL_COLOR_BUFFER_BIT;
 
         desc[1].dependencyCount = desc[0].dependencyCount;
         desc[1].dependencies[0] = desc[0].dependencies[0];
@@ -151,6 +195,9 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc[1].dependencies[3] = desc[0].dependencies[3];
         desc[1].attachmentCount = 1;
         desc[1].attachments[0] = SubPassAttachmentDescriptor{GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture2};
+        desc[1].depthMask = desc[0].depthMask;
+        desc[1].depthFunc = desc[0].depthFunc;
+        desc[1].clearBufferMask = desc[0].clearBufferMask;
 
         pipeline.taa = CreateRenderPass(desc, 2, programs.taa, width, height);
         pipeline.taa.subPasses[1].active = false;
@@ -186,11 +233,25 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.attachmentCount = 1;
         desc.attachments[0] = SubPassAttachmentDescriptor{
             GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
+        desc.depthMask = GL_FALSE;
+        desc.depthFunc = GL_ALWAYS;
+        desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
 
         pipeline.debug = CreateRenderPass(&desc, 1, programs.debug, width, height);
     }
 
     return pipeline;
+}
+
+void DeleteRenderPipeline(Pipeline &pipeline)
+{
+    DeleteRenderPass(pipeline.depthPrePass);
+    DeleteRenderPass(pipeline.shadowMapping);
+    DeleteRenderPass(pipeline.lighting);
+    DeleteRenderPass(pipeline.velocity);
+    DeleteRenderPass(pipeline.toneMapping);
+    DeleteRenderPass(pipeline.taa);
+    DeleteRenderPass(pipeline.debug);
 }
 
 void UpdateGlobalUniforms(ShaderProgram const &program)
@@ -336,28 +397,36 @@ void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64
 {
     for (uint8_t i = 0; i < pass.subPassCount; ++i)
     {
-        if (pass.subPasses[i].active)
+        auto &subPass = pass.subPasses[i];
+        if (subPass.active)
         {
-            glBindFramebuffer(GL_FRAMEBUFFER, pass.subPasses[i].fbo);
+            glBindFramebuffer(GL_FRAMEBUFFER, subPass.fbo);
             {
-                glUseProgram(pass.program.handle);
-
+                glClearColor(subPass.desc.clearColor.r,
+                             subPass.desc.clearColor.g,
+                             subPass.desc.clearColor.b,
+                             subPass.desc.clearColor.a);
+                glClearDepth(subPass.desc.clearDepth);
+                glDepthMask(subPass.desc.depthMask);
+                glDepthFunc(subPass.desc.depthFunc);
                 glViewport(0, 0, pass.width, pass.height);
                 glScissor(0, 0, pass.width, pass.height);
-                glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+                glClear(subPass.desc.clearBufferMask);
 
+                glUseProgram(pass.program.handle);
                 UpdateGlobalUniforms(pass.program);
-                BindRenderPassDependencies(pass.subPasses[i].desc.dependencies, pass.subPasses[i].desc.dependencyCount);
+                BindRenderPassDependencies(subPass.desc.dependencies, subPass.desc.dependencyCount);
 
                 for (uint64_t j = 0; j < modelCount; ++j)
                 {
                     UpdateLocalUniforms(pass.program, j);
-                    BindRenderModelTextures(models[j], pass.subPasses[i].desc.dependencyCount);
+                    BindRenderModelTextures(models[j], subPass.desc.dependencyCount);
                     DrawModel(models[j]);
-                    UnbindRenderModelTextures(models[j], pass.subPasses[i].desc.dependencyCount);
+                    UnbindRenderModelTextures(models[j], subPass.desc.dependencyCount);
                 }
 
-                UnbindRenderPassDependencies(pass.subPasses[i].desc.dependencies, pass.subPasses[i].desc.dependencyCount);
+                UnbindRenderPassDependencies(subPass.desc.dependencies, subPass.desc.dependencyCount);
+                glUseProgram(0);
             }
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
