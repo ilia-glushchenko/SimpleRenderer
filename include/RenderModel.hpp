@@ -79,6 +79,8 @@ RenderModel CreateRenderModel(
         renderModel.roughnessTexture = CreateMipMappedTexture(*material.roughness);
     }
 
+    renderModel.brdf = material.brdf == "marbel" ? 0 : 1;
+
     return renderModel;
 }
 

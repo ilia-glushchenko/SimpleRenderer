@@ -12,7 +12,8 @@ layout (location = 22) uniform uint uBumpMappingEnabledUint;
 layout (location = 23) uniform float uBumpMapScaleFactorFloat;
 layout (location = 24) uniform vec3 uCameraPos;
 layout (location = 26) uniform uint uDebugRenderModeAvailableUint;
-layout (location = 27) uniform vec3 uPointLightPosVec3Array[5];
+layout (location = 27) uniform uint uBrdfUint;
+layout (location = 28) uniform vec3 uPointLightPosVec3Array[5];
 
 layout (binding = 0) uniform sampler2D uShadowMapSampler2D;
 layout (binding = 1) uniform sampler2D uAlbedoMapSampler2D;
@@ -31,14 +32,19 @@ layout (location = 6) in vec2 inUv;
 
 layout (location = 0) out vec4 outColor;
 
+#define ENABLE_POINT_LIGHT
+#define ENABLE_DIRECT_LIGHT
+
 const float MipBias = -1.0;
 const float PI = 3.1415926535897932384626433832795;
-//const vec3 SUN_LIGHT_COLOR = vec3(252.0 / 255.0, 212/ 255.0, 64 / 255.0); // Sun
-const vec3 SUN_LIGHT_COLOR = vec3(1, 1, 1); // Sun
+const vec3 SUN_LIGHT_COLOR = vec3(252.0 / 255.0, 212/ 255.0, 64 / 255.0); // Sun
 const vec3 POINT_LIGHT_COLOR = vec3(255.0 / 255.0, 209/ 255.0, 163 / 255.0); // 4000k
 const float SilkIOR = 1.5605f;
 const float MarbleIOR = 1.486f;
+const float LinenIOR = 5.14593f;
 const float AirIOR = 1.00029f;
+const float SMALL_EPS = 1e-5f;
+const float BIG_EPS = 0.1f;
 
 vec3 AnisatropicTextureSample(sampler2D samp, vec2 sampleUV)
 {
@@ -92,20 +98,21 @@ float Chi(vec3 n, vec3 h)
 float BeckmannNDF(vec3 n, vec3 h, float ro)
 {
     float NoHSq = pow(dot(n, h), 2);
-    float RoSq = ro * ro;
+    float RoSq = ro * ro + SMALL_EPS;
     return Chi(n, h) / (PI * RoSq * pow(NoHSq, 2)) * exp((NoHSq - 1) / (RoSq * NoHSq));
 }
 
 float GinnekenLambdaFunction(vec3 v, vec3 l)
 {
-    float fi = acos(dot(v, l));
-    return (4.41 * fi) / (4.41 * fi + 1);
+    float VoL = clamp(dot(v, l), -1, 1);
+    float fi = acos(VoL);
+    return (4.41 * (fi + SMALL_EPS)) / (4.41 * fi + 1);
 }
 
 float BeckmannLambdaFunction(vec3 n, vec3 s, float ro)
 {
     float NoS = dot(n, s);
-    float a =  NoS / (ro * sqrt(1 - NoS*NoS));
+    float a =  NoS / (ro * sqrt(1 - NoS*NoS) + SMALL_EPS);
 
     return 1;
     return a < 1.6 ? (1 - 1.259*a + 0.396*a*a) / (3.535*a + 2.181*a*a) : 0;
@@ -132,7 +139,7 @@ float FresnelSchlickF0(float iorMedium, float iorInterface)
 
 float FresnelSchlick(float F0, vec3 n, vec3 l)
 {
-    return F0 + (1 - F0) * pow((1 - max(0, dot(n, l))), 5);
+    return F0 + (1 - F0) * pow((1 - max(0, dot(n, l) - SMALL_EPS)), 5);
 }
 
 float FresnelSchlick(vec3 v, vec3 l)
@@ -140,6 +147,37 @@ float FresnelSchlick(vec3 v, vec3 l)
     vec3 h = (l + v) / length(l + v);
     return FresnelSchlick(FresnelSchlickF0(AirIOR, MarbleIOR), h, l);
 }
+
+//Cloth BRDF
+float CharlieD(float roughness, float ndoth)
+{
+    float invR = 1. / roughness;
+    float cos2h = ndoth * ndoth;
+    float sin2h = 1. - cos2h;
+    return (2. + invR) * pow(sin2h, invR * .5) / (2. * PI);
+}
+
+float AshikhminV(float ndotv, float ndotl)
+{
+    return 1. / (4. * (ndotl + ndotv - ndotl * ndotv));
+}
+
+float CookToranceLinen(vec3 v, vec3 n, vec3 l, float ro)
+{
+    vec3 h = (l + v) / length(l + v);
+
+    float D = BeckmannNDF(n, h, ro);
+    float G2 = SmithDirectionHeightCorrelatedMaskingShadowingFunction(
+        BeckmannLambdaFunction(n, l, ro),
+        BeckmannLambdaFunction(n, v, ro),
+        GinnekenLambdaFunction(v, l)
+    );
+    float F = FresnelSchlick(FresnelSchlickF0(AirIOR, MarbleIOR), h, l);
+
+    return F * CharlieD(ro, dot(n,h)) * AshikhminV(dot(n,v), dot(n,l)) * PI * dot(n, l);
+}
+
+//Cloth BRDF
 
 float CookTorance(vec3 v, vec3 n, vec3 l, float ro)
 {
@@ -153,14 +191,14 @@ float CookTorance(vec3 v, vec3 n, vec3 l, float ro)
     );
     float F = FresnelSchlick(FresnelSchlickF0(AirIOR, MarbleIOR), h, l);
 
-    return (F * G2 * D) / (4 * max(abs(dot(n, l)), 1e-5) * max(abs(dot(n, v)), 1e-5));
+    return (F * G2 * D) / (4 * max(abs(dot(n, l)), BIG_EPS) * max(abs(dot(n, v)), BIG_EPS));
 }
 
 vec3 ShirleyFresnelSubSurfaceAlbedo(float F0, vec3 ssAlbedo, vec3 v, vec3 n, vec3 l)
 {
     return 21.f / (20.f * PI) * (1 - F0) * ssAlbedo
-        * (1 - pow(1 - max(dot(n, l), 0), 5))
-        * (1 - pow(1 - max(dot(n, v), 0), 5));
+        * (1 - pow(1 - max(dot(n, l) - SMALL_EPS, 0), 5))
+        * (1 - pow(1 - max(dot(n, v) - SMALL_EPS, 0), 5));
 }
 
 float LightFalloffWindowingFunction(float r0, float rMin, float rMax, float r)
@@ -168,40 +206,50 @@ float LightFalloffWindowingFunction(float r0, float rMin, float rMax, float r)
     return pow(r0 / max(r, rMin), 2) * pow(max(1 - pow(r / rMax, 4), 0), 2);
 }
 
-vec3 CalculateRadiance(float depth, vec2 uv, vec3 n, vec3 shadowPosMVP, mat3 TBN)
+vec3 CalculateRadiance(float shadowMapDepth, vec2 uv, vec3 n, vec3 shadowPosMVP, mat3 TBN)
 {
     vec3 radiance = vec3(0);
 
-    for (uint i = 0; i < 5; i+=2)
-    {
-        vec3 view = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
+    vec3 view = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
 
-        if (bool(uBumpMapAvailableUint) && bool(uBumpMappingEnabledUint)) {
-            float h = AnisatropicTextureSample(uBumpMapSampler2D, uv).r;
-            uv = uv + h * (TBN * view.xyz).xy * uBumpMapScaleFactorFloat;
-        }
-
-        vec3 ssAlbedo = AnisatropicTextureSample(uAlbedoMapSampler2D, uv).rgb;
-        vec3 normal = normalize((AnisatropicTextureSample(uNormalMapSampler2D, uv).xyz * 2) - 1);
-        normal = normalize(n + TBN * normal);
-        float ro = bool(uRoughnessMapAvailableUint) ? AnisatropicTextureSample(uRoughnessSampler2D, uv).r : 1;
-
-        float fSpecDL = 0;
-        if (bool(uShadowMappingEnabledUint) && abs(shadowPosMVP.z) < depth - 0.45f) {
-            fSpecDL = CookTorance(view, normal, directionalLightDir, ro);
-        }
-
-        vec3 pointLightDir = -normalize(positionWorld.xyz / positionWorld.w - uPointLightPosVec3Array[i]);
-        vec3 diff = ShirleyFresnelSubSurfaceAlbedo(FresnelSchlickF0(AirIOR, MarbleIOR), ssAlbedo, view, normal, pointLightDir);
-        float fSpecPL = CookTorance(view, normal, pointLightDir, ro);
-        float d = distance(uPointLightPosVec3Array[i], positionWorld.xyz / positionWorld.w);
-        vec3 spec = LightFalloffWindowingFunction(1000, 1, 10000, d) *
-            PI * fSpecPL * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0);
-        vec3 specDL = LightFalloffWindowingFunction(1000, 1, 10000, 800) *
-            PI * fSpecDL * SUN_LIGHT_COLOR * max(dot(n, directionalLightDir), 0);
-
-        radiance += diff + spec + specDL;
+    if (bool(uBumpMapAvailableUint) && bool(uBumpMappingEnabledUint)) {
+        float h = AnisatropicTextureSample(uBumpMapSampler2D, uv).r;
+        uv = uv + h * (TBN * view.xyz).xy * uBumpMapScaleFactorFloat;
     }
+
+    vec3 ssAlbedo = AnisatropicTextureSample(uAlbedoMapSampler2D, uv).rgb;
+    vec3 normal = normalize(TBN * normalize((AnisatropicTextureSample(uNormalMapSampler2D, uv).xyz * 2) - 1));
+    float ro = bool(uRoughnessMapAvailableUint) ? AnisatropicTextureSample(uRoughnessSampler2D, uv).r : 1;
+
+#ifdef ENABLE_POINT_LIGHT
+    for (uint i = 0; i < 5; i+=1)
+    {
+        vec3 pointLightDir = -normalize(positionWorld.xyz / positionWorld.w - uPointLightPosVec3Array[i]);
+        vec3 fDiffPL = ShirleyFresnelSubSurfaceAlbedo(
+            FresnelSchlickF0(AirIOR, MarbleIOR), ssAlbedo, view, normal, pointLightDir); //Shirley
+        //vec3 fDiffPL = ssAlbedo / PI; //Lambert
+        vec3 fSpecPL = PI *
+            (uBrdfUint == 0 ? CookTorance(view, normal, pointLightDir, ro)
+                : CookToranceLinen(view, normal, pointLightDir, ro))
+            * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0);
+
+        float d = distance(uPointLightPosVec3Array[i], positionWorld.xyz / positionWorld.w);
+        radiance += LightFalloffWindowingFunction(1, 1, 350, d) * 100000 * (fSpecPL + fDiffPL);
+    }
+#endif
+
+#ifdef ENABLE_DIRECT_LIGHT
+    vec3 fSpecDL = vec3(0);
+    if (bool(uShadowMappingEnabledUint) && shadowPosMVP.z < shadowMapDepth)
+    {
+        fSpecDL = PI * (uBrdfUint == 0
+            ? CookTorance(view, normal, directionalLightDir, ro)
+            : CookToranceLinen(view, normal, directionalLightDir, ro))
+                * SUN_LIGHT_COLOR * max(dot(n, directionalLightDir), 0);
+
+        radiance += (fSpecDL + ssAlbedo / PI);
+    }
+#endif
 
     return radiance;
 }
@@ -213,7 +261,7 @@ void main()
     vec3 l = normalize(directionalLightDir);
 
     vec3 shadowPosMVP = positionShadowMapMvp.xyz / positionShadowMapMvp.w;
-    float depth = AnisatropicTextureSample(uShadowMapSampler2D, (shadowPosMVP.xy+1)*0.5f).x;
+    float shadowMapDepth = texture(uShadowMapSampler2D, (shadowPosMVP.xy+1)*0.5f).x;
 
     mat3 TBN = CalculateTBNMatrix(n, positionWorld.xyz / positionWorld.w, inUv);
     vec2 uv = inUv;
@@ -224,11 +272,11 @@ void main()
             outColor = vec4(uColor, 1);
         }
         else{
-            vec3 radiance = CalculateRadiance(depth, uv, n, shadowPosMVP, TBN);
+            vec3 radiance = CalculateRadiance(shadowMapDepth, uv, n, shadowPosMVP, TBN);
             outColor = vec4(radiance, 1);
         }
     }
-    else if (uRenderModeUint == 1) // Normal
+    else if (uRenderModeUint == 1) // Normalf
     {
         outColor = vec4((n + 1) * 0.5f, 1);
     }
@@ -261,7 +309,7 @@ void main()
     }
     else if (uRenderModeUint == 5) // ShadowMap
     {
-        outColor = vec4(vec3(pow(depth, 4096)), 1);
+        outColor = vec4(vec3(shadowPosMVP.z < shadowMapDepth - 0.35 ? 1 : 0), 1);
     }
     else if (uRenderModeUint == 6) // Metallic
     {

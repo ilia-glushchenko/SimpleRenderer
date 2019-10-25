@@ -8,7 +8,7 @@
 #include "Math.hpp"
 
 #include <glbinding/Binding.h>
-#include <glbinding/gl46/gl.h>
+#include <glbinding/gl46ext/gl.h>
 using namespace gl;
 
 struct UniformBindingUI32
@@ -24,7 +24,9 @@ struct UniformBindingF1
     float const *data = nullptr;
     int32_t count = 0;
 };
+using UniformBindingV2F = UniformBindingF1;
 using UniformBindingV3F = UniformBindingF1;
+using UniformBindingV4F = UniformBindingF1;
 using UniformBindingM4F = UniformBindingF1;
 
 struct UniformBindingUI32Array
@@ -42,7 +44,9 @@ struct UniformBindingF1Array
     uint32_t offset = 0;
     uint32_t stride = 0;
 };
+using UniformBindingV2FArray = UniformBindingF1Array;
 using UniformBindingV3FArray = UniformBindingF1Array;
+using UniformBindingV4FArray = UniformBindingF1Array;
 using UniformBindingM4FArray = UniformBindingF1Array;
 
 template <typename T>
@@ -66,22 +70,30 @@ struct UniformsDescriptor
 {
     using UI32 = GlobalUniformDescriptor<uint32_t>;
     using F1 = GlobalUniformDescriptor<float>;
+    using F2 = GlobalUniformDescriptor<float>;
     using F3 = GlobalUniformDescriptor<float>;
+    using F4 = GlobalUniformDescriptor<float>;
     using MAT4 = GlobalUniformDescriptor<float>;
 
     using ArrayUI32 = LocalUniformDescriptor<uint32_t>;
     using ArrayF1 = LocalUniformDescriptor<float>;
+    using ArrayF2 = LocalUniformDescriptor<float>;
     using ArrayF3 = LocalUniformDescriptor<float>;
+    using ArrayF4 = LocalUniformDescriptor<float>;
     using ArrayMAT4 = LocalUniformDescriptor<float>;
 
     GlobalUniformDescriptor<uint32_t> ui32;
     GlobalUniformDescriptor<float> float1;
+    GlobalUniformDescriptor<float> float2;
     GlobalUniformDescriptor<float> float3;
+    GlobalUniformDescriptor<float> float4;
     GlobalUniformDescriptor<float> mat4;
 
     LocalUniformDescriptor<uint32_t> ui32Array;
     LocalUniformDescriptor<float> float1Array;
+    LocalUniformDescriptor<float> float2Array;
     LocalUniformDescriptor<float> float3Array;
+    LocalUniformDescriptor<float> float4Array;
     LocalUniformDescriptor<float> mat4Array;
 };
 
@@ -89,12 +101,16 @@ struct ShaderProgram
 {
     std::vector<UniformBindingUI32> ui32;
     std::vector<UniformBindingF1> f1;
+    std::vector<UniformBindingV2F> f2;
     std::vector<UniformBindingV3F> f3;
+    std::vector<UniformBindingV4F> f4;
     std::vector<UniformBindingM4F> f16;
 
     std::vector<UniformBindingUI32Array> ui32Array;
     std::vector<UniformBindingF1Array> f1Array;
+    std::vector<UniformBindingV2FArray> f2Array;
     std::vector<UniformBindingV3FArray> f3Array;
+    std::vector<UniformBindingV4FArray> f4Array;
     std::vector<UniformBindingM4FArray> f16Array;
 
     GLuint vertexShaderHandle = 0;
@@ -166,13 +182,21 @@ struct SubPass
     bool active = false;
 };
 
+constexpr uint8_t SHORT_STRING_MAX_LENGTH = 64;
+struct ShortString
+{
+    char data[SHORT_STRING_MAX_LENGTH] = {};
+    uint8_t length = 0;
+};
+
 struct RenderPass
 {
+    ShortString name;
     SubPass subPasses[RENDER_PASS_MAX_SUBPASS] = {};
-    uint8_t subPassCount = 0;
     ShaderProgram program = {};
     int32_t width = 0;
     int32_t height = 0;
+    uint8_t subPassCount = 0;
 };
 
 struct PipelineShaderPrograms
@@ -202,8 +226,7 @@ struct TAABuffer
     std::vector<sr::math::Matrix4x4> prevModels;
     sr::math::Matrix4x4 prevView = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 prevProj = sr::math::CreateIdentityMatrix();
-    sr::math::Matrix4x4 prevJitter = sr::math::CreateIdentityMatrix();
-    sr::math::Matrix4x4 jitter = sr::math::CreateIdentityMatrix();
+    sr::math::Vec2 jitter = {};
     uint32_t count = 0;
 };
 
@@ -234,6 +257,8 @@ struct RenderModel
     sr::math::Matrix4x4 model = sr::math::CreateIdentityMatrix();
     sr::math::Vec3 color = {0.5f, 0.5f, 0.5f};
     GLuint debugRenderModel = 0;
+    //ToDo: Better material system is needed
+    GLuint brdf = 0;
 };
 
 struct DirectionalLightSource

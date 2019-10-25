@@ -68,6 +68,7 @@ struct MaterialSource
     TextureSource *bump;
     TextureSource *metallic;
     TextureSource *roughness;
+    std::string brdf;
 };
 
 struct Model
@@ -116,15 +117,15 @@ void LoadGeometry(tinyobj::attrib_t const &attrib, tinyobj::shape_t const &shape
             vertexMapping[key] = geometry->vertices.size();
 
             geometry->indices.push_back(static_cast<uint32_t>(geometry->vertices.size()));
-            geometry->vertices.push_back({attrib.vertices[mesh.indices[i].vertex_index * 3 + 0],
-                                          attrib.vertices[mesh.indices[i].vertex_index * 3 + 1],
-                                          attrib.vertices[mesh.indices[i].vertex_index * 3 + 2]});
-            geometry->normals.push_back({attrib.normals[mesh.indices[i].normal_index * 3 + 0],
-                                         attrib.normals[mesh.indices[i].normal_index * 3 + 1],
-                                         attrib.normals[mesh.indices[i].normal_index * 3 + 2]});
+            geometry->vertices.push_back({attrib.vertices[static_cast<uint64_t>(mesh.indices[i].vertex_index) * 3 + 0],
+                                          attrib.vertices[static_cast<uint64_t>(mesh.indices[i].vertex_index) * 3 + 1],
+                                          attrib.vertices[static_cast<uint64_t>(mesh.indices[i].vertex_index) * 3 + 2]});
+            geometry->normals.push_back({attrib.normals[static_cast<uint64_t>(mesh.indices[i].normal_index) * 3 + 0],
+                                         attrib.normals[static_cast<uint64_t>(mesh.indices[i].normal_index) * 3 + 1],
+                                         attrib.normals[static_cast<uint64_t>(mesh.indices[i].normal_index) * 3 + 2]});
             geometry->uvs.push_back({
-                attrib.texcoords[mesh.indices[i].texcoord_index * 2 + 0],
-                attrib.texcoords[mesh.indices[i].texcoord_index * 2 + 1],
+                attrib.texcoords[static_cast<uint64_t>(mesh.indices[i].texcoord_index) * 2 + 0],
+                attrib.texcoords[static_cast<uint64_t>(mesh.indices[i].texcoord_index) * 2 + 1],
             });
         }
         else
@@ -207,7 +208,13 @@ MaterialSource CreateMaterialSource(std::string const &folder, tinyobj::material
         roughness = CreateTextureSource(folder, material.roughness_texname);
     }
 
-    return MaterialSource{albedo, normal, bump, metallic, roughness};
+    std::string brdf;
+    if (auto it = material.unknown_parameter.find("mat"); it != material.unknown_parameter.end())
+    {
+        brdf = material.unknown_parameter.at("mat");
+    }
+
+    return MaterialSource{albedo, normal, bump, metallic, roughness, brdf};
 }
 
 void FreeMaterialSource(MaterialSource &material)
@@ -294,7 +301,7 @@ std::string LoadFile(char const *filepath)
     }
 
     std::stringstream strStream;
-    strStream << inFile.rdbuf(); 
+    strStream << inFile.rdbuf();
 
     return strStream.str();
 }

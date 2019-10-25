@@ -33,6 +33,11 @@ struct Vec2
         return {-x, -y};
     }
 
+    constexpr Vec2 operator-(float s) const
+    {
+        return {x - s, y - s};
+    }
+
     constexpr Vec2 operator*(float s) const
     {
         return {x * s, y * s};
@@ -68,14 +73,50 @@ struct Vec3
         return *this = *this + other;
     }
 
-    constexpr Vec3 operator+(Vec3 const &other) const
+    Vec3 &operator-=(Vec3 const &other)
     {
-        return {other.x + x, other.y + y, other.z + z};
+        return *this = *this - other;
+    }
+
+    constexpr Vec3 operator+(Vec3 other) const
+    {
+        other.x += x;
+        other.y += y;
+        other.z += z;
+        return other;
+    }
+
+    constexpr Vec3 operator-(Vec3 other) const
+    {
+        other.x = x - other.x;
+        other.y = y - other.y;
+        other.z = z - other.z;
+        return other;
+    }
+
+    constexpr Vec3 operator/(float s) const
+    {
+        return {x / s, y / s, z / s};
+    }
+
+    constexpr Vec3 operator*(float s) const
+    {
+        return {x * s, y * s, z * s};
     }
 
     constexpr Vec3 operator-() const
     {
         return {-x, -y, -z};
+    }
+
+    constexpr bool operator==(Vec3 const &other) const
+    {
+        return x == other.x && y == other.y && z == other.z;
+    }
+
+    constexpr bool operator!=(Vec3 const &other) const
+    {
+        return !(*this == other);
     }
 };
 
@@ -262,9 +303,9 @@ constexpr Matrix4x4 CreatePerspectiveProjectionMatrix(float left, float right, f
     Matrix4x4 mat = {};
 
     mat._11 = (2 * near) / (right - left);
-    mat._13 = -(right + left) / (right - left);
-
     mat._22 = (2 * near) / (top - bottom);
+
+    mat._13 = -(right + left) / (right - left);
     mat._23 = -(top + bottom) / (top - bottom);
 
     mat._33 = (far + near) / (far - near);
@@ -360,6 +401,11 @@ Vec3 CreateUniformRandomVec3(float min, float max)
         CreateUniformRandomFloat(min, max),
         CreateUniformRandomFloat(min, max),
     };
+}
+
+constexpr bool IsNullMatrix(Matrix4x4 const &m)
+{
+    return m._11 == 0 && m._21 == 0 && m._31 == 0 && m._41 == 0 && m._12 == 0 && m._22 == 0 && m._32 == 0 && m._42 == 0 && m._13 == 0 && m._23 == 0 && m._33 == 0 && m._43 == 0 && m._14 == 0 && m._24 == 0 && m._34 == 0 && m._44 == 0;
 }
 
 } // namespace sr::math

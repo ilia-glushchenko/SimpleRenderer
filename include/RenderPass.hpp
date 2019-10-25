@@ -13,12 +13,16 @@
 RenderPass CreateRenderPass(
     SubPassDescriptor const *desc, uint8_t count,
     ShaderProgram program,
-    int32_t width, int32_t height)
+    int32_t width, int32_t height,
+    char const(name)[SHORT_STRING_MAX_LENGTH], uint8_t length)
 {
     assert(desc != nullptr);
     assert(count < RENDER_PASS_MAX_SUBPASS);
+    assert(length <= SHORT_STRING_MAX_LENGTH);
 
     RenderPass pass;
+    std::memcpy(pass.name.data, name, sizeof(char) * length);
+    pass.name.length = length;
     pass.program = program;
     pass.subPassCount = count;
     pass.width = width;
@@ -99,7 +103,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.depthFunc = GL_LESS;
         desc.clearBufferMask = GL_DEPTH_BUFFER_BIT;
 
-        pipeline.depthPrePass = CreateRenderPass(&desc, 1, programs.depthPrePass, width, height);
+        auto const name = "Depth Pre-pass";
+        pipeline.depthPrePass = CreateRenderPass(&desc, 1, programs.depthPrePass, width, height, name, std::strlen(name));
     }
 
     {
@@ -113,7 +118,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.depthFunc = GL_LESS;
         desc.clearBufferMask = GL_DEPTH_BUFFER_BIT;
 
-        pipeline.shadowMapping = CreateRenderPass(&desc, 1, programs.shadowMapping, 4096, 4096);
+        auto const name = "Shadow Mapping";
+        pipeline.shadowMapping = CreateRenderPass(&desc, 1, programs.shadowMapping, 4096, 4096, name, std::strlen(name));
     }
 
     {
@@ -133,7 +139,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
         desc.clearColor = {1, 1, 1, 1};
 
-        pipeline.lighting = CreateRenderPass(&desc, 1, programs.lighting, width, height);
+        auto const name = "Lighting";
+        pipeline.lighting = CreateRenderPass(&desc, 1, programs.lighting, width, height, name, std::strlen(name));
     }
 
     {
@@ -148,7 +155,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.depthFunc = GL_EQUAL;
         desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
 
-        pipeline.velocity = CreateRenderPass(&desc, 1, programs.velocity, width, height);
+        auto const name = "Velocity";
+        pipeline.velocity = CreateRenderPass(&desc, 1, programs.velocity, width, height, name, std::strlen(name));
     }
 
     {
@@ -165,7 +173,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.depthFunc = GL_ALWAYS;
         desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
 
-        pipeline.toneMapping = CreateRenderPass(&desc, 1, programs.toneMapping, width, height);
+        auto const name = "Tone Mapping";
+        pipeline.toneMapping = CreateRenderPass(&desc, 1, programs.toneMapping, width, height, name, std::strlen(name));
     }
 
     {
@@ -199,7 +208,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc[1].depthFunc = desc[0].depthFunc;
         desc[1].clearBufferMask = desc[0].clearBufferMask;
 
-        pipeline.taa = CreateRenderPass(desc, 2, programs.taa, width, height);
+        auto const name = "Temporal Pass";
+        pipeline.taa = CreateRenderPass(desc, 2, programs.taa, width, height, name, std::strlen(name));
         pipeline.taa.subPasses[1].active = false;
     }
 
@@ -237,7 +247,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.depthFunc = GL_ALWAYS;
         desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
 
-        pipeline.debug = CreateRenderPass(&desc, 1, programs.debug, width, height);
+        auto const name = "Debug";
+        pipeline.debug = CreateRenderPass(&desc, 1, programs.debug, width, height, name, std::strlen(name));
     }
 
     return pipeline;
@@ -256,19 +267,27 @@ void DeleteRenderPipeline(Pipeline &pipeline)
 
 void UpdateGlobalUniforms(ShaderProgram const &program)
 {
-    for (auto &uniform : program.ui32)
+    for (auto const &uniform : program.ui32)
     {
         glUniform1uiv(uniform.location, uniform.count, uniform.data);
     }
-    for (auto &uniform : program.f1)
+    for (auto const &uniform : program.f1)
     {
         glUniform1fv(uniform.location, uniform.count, uniform.data);
     }
-    for (auto &uniform : program.f3)
+    for (auto const &uniform : program.f2)
+    {
+        glUniform2fv(uniform.location, uniform.count, uniform.data);
+    }
+    for (auto const &uniform : program.f3)
     {
         glUniform3fv(uniform.location, uniform.count, uniform.data);
     }
-    for (auto &uniform : program.f16)
+    for (auto const &uniform : program.f4)
+    {
+        glUniform4fv(uniform.location, uniform.count, uniform.data);
+    }
+    for (auto const &uniform : program.f16)
     {
         glUniformMatrix4fv(uniform.location, uniform.count, GL_TRUE, uniform.data);
     }
@@ -276,25 +295,37 @@ void UpdateGlobalUniforms(ShaderProgram const &program)
 
 void UpdateLocalUniforms(ShaderProgram const &program, uint64_t index)
 {
-    for (auto &uniform : program.ui32Array)
+    for (auto const &uniform : program.ui32Array)
     {
         uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
         data = data + uniform.offset + uniform.stride * index;
         glUniform1ui(uniform.location, *reinterpret_cast<uint32_t const *>(data));
     }
-    for (auto &uniform : program.f1Array)
+    for (auto const &uniform : program.f1Array)
     {
         uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
         data = data + uniform.offset + uniform.stride * index;
         glUniform1f(uniform.location, *reinterpret_cast<float const *>(data));
     }
-    for (auto &uniform : program.f3Array)
+    for (auto const &uniform : program.f2Array)
+    {
+        uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
+        data = data + uniform.offset + uniform.stride * index;
+        glUniform2fv(uniform.location, 1, reinterpret_cast<float const *>(data));
+    }
+    for (auto const &uniform : program.f3Array)
     {
         uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
         data = data + uniform.offset + uniform.stride * index;
         glUniform3fv(uniform.location, 1, reinterpret_cast<float const *>(data));
     }
-    for (auto &uniform : program.f16Array)
+    for (auto const &uniform : program.f4Array)
+    {
+        uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
+        data = data + uniform.offset + uniform.stride * index;
+        glUniform4fv(uniform.location, 1, reinterpret_cast<float const *>(data));
+    }
+    for (auto const &uniform : program.f16Array)
     {
         uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
         data = data + uniform.offset + uniform.stride * index;
@@ -395,6 +426,8 @@ void DrawModel(RenderModel const &model)
 
 void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64_t modelCount)
 {
+    glPushGroupMarkerEXT(pass.name.length, pass.name.data);
+
     for (uint8_t i = 0; i < pass.subPassCount; ++i)
     {
         auto &subPass = pass.subPasses[i];
@@ -431,6 +464,8 @@ void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
         }
     }
+
+    glPopGroupMarkerEXT();
 }
 
 void ExecuteBackBufferBlitRenderPass(GLuint fbo, GLenum attachment, int32_t width, int32_t height)

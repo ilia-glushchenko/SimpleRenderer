@@ -4,9 +4,8 @@ layout (location = 10) uniform vec3 uColor;
 layout (location = 11) uniform mat4 uModelMat;
 layout (location = 12) uniform mat4 uViewMat;
 layout (location = 13) uniform mat4 uProjMat;
-layout (location = 14) uniform mat4 uJitterMat;
-layout (location = 15) uniform mat4 uDirLightViewMat;
-layout (location = 16) uniform mat4 uDirLightProjMat;
+layout (location = 14) uniform mat4 uDirLightViewMat;
+layout (location = 15) uniform mat4 uDirLightProjMat;
 
 layout (location = 0) in vec3 aPosition;
 layout (location = 1) in vec3 aNormal;
@@ -27,10 +26,10 @@ void main()
     normalWorld = (uModelMat * vec4(aNormal, 0)).xyz;
     normalView = (uViewMat * uModelMat * vec4(aNormal, 0)).xyz;
 
-    directionalLightDir = (uViewMat * normalize(vec4(0, 1, 0, 0))).xyz;
+    directionalLightDir = (uViewMat * uDirLightViewMat * vec4(0, 0, -1, 0)).xyz;
     positionShadowMapMvp = uDirLightProjMat * uDirLightViewMat * uModelMat * vec4(aPosition, 1.0);
 
     uv = aUV;
 
-    gl_Position = uJitterMat * uProjMat * uViewMat * uModelMat * vec4(aPosition, 1);
+    gl_Position = uProjMat * uViewMat * uModelMat * vec4(aPosition, 1);
 }

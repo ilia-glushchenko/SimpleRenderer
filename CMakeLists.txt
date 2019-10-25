@@ -50,6 +50,7 @@ set(SIMPLE_REDNERER_HEADERS
     include/Texture.hpp
     include/Math.hpp
     include/Loader.hpp
+    include/Geometry.hpp
 )
 
 set(SIMPLE_RENDERER_SOURCES

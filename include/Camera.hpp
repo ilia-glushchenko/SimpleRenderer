@@ -18,12 +18,10 @@ Camera CreateCamera()
     camera.far = 10000.f;
     camera.proj = sr::math::CreatePerspectiveProjectionMatrix(camera.near, camera.far, camera.fov, 1.f);
     camera.view = sr::math::CreateIdentityMatrix();
-    //camera.pos = {-1217.f, 101.f, 40.f};
-    //camera.pos = {-1217.f, -2.3f, 41.f};
-    camera.pos = {-928.f, 149.f, 10.5f};
+    camera.pos = {-530.f, 150.f, -35.f};
     camera.xWorldAngle = 0.1f;
-    //camera.yWorldAngle = -1.46f;
-    camera.yWorldAngle = -2.9f;
+    camera.xWorldAngle = 0;
+    camera.yWorldAngle = -1.57f;
 
     return camera;
 }

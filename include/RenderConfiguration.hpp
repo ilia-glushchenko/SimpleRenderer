@@ -28,7 +28,7 @@ MessageCallback(GLenum source,
                 const GLchar *message,
                 const void *userParam)
 {
-    if (type != GL_DEBUG_TYPE_OTHER)
+    if (type != GL_DEBUG_TYPE_OTHER && type != GL_DEBUG_TYPE_MARKER)
     {
         fprintf(stderr, "GL CALLBACK: %s type = 0x%x, severity = 0x%x, message = %s\n\n",
                 (type == GL_DEBUG_TYPE_ERROR ? "** GL ERROR **" : ""),

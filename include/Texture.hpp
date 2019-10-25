@@ -24,19 +24,20 @@ Texture2DDescriptor CreateDefaultTexture2DDescriptor(sr::load::TextureSource con
     return desc;
 }
 
-GLuint InitializeTexture(Texture2DDescriptor const &desc, sr::load::TextureSource const &source)
+void InitializeTexture(Texture2DDescriptor const &desc, sr::load::TextureSource const &source)
 {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, desc.sWrap);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, desc.tWrap);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, desc.magFilter);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, desc.minFilter);
-    glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, desc.maxAnisatropy);
+    if (desc.maxAnisatropy > 1.0f)
+    {
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY, desc.maxAnisatropy);
+    }
 
     glTexImage2D(GL_TEXTURE_2D, 0, desc.internalFormat,
                  source.width, source.height, 0, desc.format,
                  desc.type, source.data);
-
-    return 0;
 }
 
 void CreateTextures(
@@ -130,7 +131,7 @@ GLuint CreateColorAttachment(int32_t width, int32_t height)
     desc.tWrap = GL_CLAMP;
     desc.magFilter = GL_LINEAR;
     desc.minFilter = GL_LINEAR;
-    desc.maxAnisatropy = 1;
+    desc.maxAnisatropy = 1.f;
 
     CreateTextures(source, desc, &handle, 1);
 

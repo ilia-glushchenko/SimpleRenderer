@@ -1,10 +1,42 @@
 #version 460
 
 layout (location = 10, binding = 0) uniform sampler2D uLinearSpaceSceneReferredTextureSampler2D;
-
 layout (location = 0) in vec2 uv;
-
 layout (location = 0) out vec4 outColor;
+
+float Linear2sRGB(float channel)
+{
+    if(channel <= 0.0031308)
+        return 12.92 * channel;
+    else
+        return (1.0 + 0.055) * pow(channel, 1.0/2.4) - 0.055;
+}
+
+vec3 Linear2sRGB(vec3 color)
+{
+    return vec3(
+        Linear2sRGB(color.r),
+        Linear2sRGB(color.g),
+        Linear2sRGB(color.b)
+    );
+}
+
+float sRGB2Linear(float channel)
+{
+    if (channel <= 0.04045)
+        return channel / 12.92;
+    else
+        return pow((channel + 0.055) / (1.0 + 0.055), 2.4);
+}
+
+vec3 sRGB2Linear(vec3 color)
+{
+    return vec3(
+        sRGB2Linear(color.r),
+        sRGB2Linear(color.g),
+        sRGB2Linear(color.b)
+    );
+}
 
 // sRGB => XYZ => D65_2_D60 => AP1 => RRT_SAT
 const mat3 ACESInputMat =
@@ -46,5 +78,7 @@ vec3 ACESFitted(vec3 color)
 
 void main()
 {
+    //ToDo: Tone Mapping is not physically correct before TAA, can do better
+    //  see https://de45xmedrsdbp.cloudfront.net/Resources/files/TemporalAA_small-59732822.pdf
     outColor = vec4(ACESFitted(texture(uLinearSpaceSceneReferredTextureSampler2D, uv).rgb), 1);
 }

@@ -93,6 +93,7 @@ std::vector<T> CreateUniformBinding(GLuint program, std::vector<D *> const &data
 
     for (uint32_t i = 0; i < names.size(); ++i)
     {
+        assert(counts[i] > 0);
         bindings.push_back({static_cast<int32_t>(glGetUniformLocation(program, names[i])), data[i], counts[i]});
 
         if (bindings.back().location == -1)
@@ -159,11 +160,15 @@ void CreateShaderProgramUniformBindings(ShaderProgram &program, UniformsDescript
 {
     program.ui32 = CreateUniformBinding<UniformBindingUI32>(program.handle, desc.ui32.data, desc.ui32.names, desc.ui32.counts);
     program.f1 = CreateUniformBinding<UniformBindingF1>(program.handle, desc.float1.data, desc.float1.names, desc.float1.counts);
+    program.f2 = CreateUniformBinding<UniformBindingV2F>(program.handle, desc.float2.data, desc.float2.names, desc.float2.counts);
     program.f3 = CreateUniformBinding<UniformBindingV3F>(program.handle, desc.float3.data, desc.float3.names, desc.float3.counts);
+    program.f4 = CreateUniformBinding<UniformBindingV4F>(program.handle, desc.float4.data, desc.float4.names, desc.float4.counts);
     program.f16 = CreateUniformBinding<UniformBindingM4F>(program.handle, desc.mat4.data, desc.mat4.names, desc.mat4.counts);
     program.ui32Array = CreateUniformBinding<UniformBindingUI32Array>(program.handle, desc.ui32Array.data, desc.ui32Array.names, desc.ui32Array.offsets, desc.ui32Array.strides);
     program.f1Array = CreateUniformBinding<UniformBindingF1Array>(program.handle, desc.float1Array.data, desc.float1Array.names, desc.float1Array.offsets, desc.float1Array.strides);
+    program.f2Array = CreateUniformBinding<UniformBindingV2FArray>(program.handle, desc.float2Array.data, desc.float2Array.names, desc.float2Array.offsets, desc.float2Array.strides);
     program.f3Array = CreateUniformBinding<UniformBindingV3FArray>(program.handle, desc.float3Array.data, desc.float3Array.names, desc.float3Array.offsets, desc.float3Array.strides);
+    program.f4Array = CreateUniformBinding<UniformBindingV4FArray>(program.handle, desc.float4Array.data, desc.float4Array.names, desc.float4Array.offsets, desc.float4Array.strides);
     program.f16Array = CreateUniformBinding<UniformBindingM4FArray>(program.handle, desc.mat4Array.data, desc.mat4Array.names, desc.mat4Array.offsets, desc.mat4Array.strides);
 }
 
