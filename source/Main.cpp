@@ -29,6 +29,7 @@ bool g_drawUi = false;
 bool g_isHotRealoadRequired = false;
 uint32_t g_shadowMapsMode = 1;
 uint32_t g_bumpMappingEnabled = 1;
+uint32_t g_toneMappingEnabled = 1;
 float g_bumpMapScaleFactor = 0.00001f;
 uint32_t g_bumpMapAvailable = 0;
 uint32_t g_metallicMapAvailable = 0;
@@ -40,7 +41,6 @@ sr::math::Vec3 g_pointLights[g_pointLightCount] = {
     {0, 200, -45},
     {700, 200, -45},
     {1100, 200, -45}};
-char const *g_disableEnableList[2] = {"Disabled", "Enabled"};
 enum class eRenderMode : uint32_t
 {
     Full = 0,
@@ -56,12 +56,12 @@ enum class eRenderMode : uint32_t
 char const *g_renderModesStr[static_cast<uint32_t>(eRenderMode::Count)] = {
     "Full",
     "Normal",
-    "NormalMap",
-    "BumpMap",
-    "Depth",
-    "ShadowMap",
-    "MetallicMap",
-    "RoughnessMap"};
+    "Normal Maps",
+    "Bump Maps",
+    "Depth Buffer",
+    "Shadow Maps",
+    "Metallic Maps",
+    "Roughness Maps"};
 
 sr::math::Matrix4x4 CreateCameraMatrix(sr::math::Vec3 pos, float xWorldAngle, float yWorldAngle)
 {
@@ -207,12 +207,43 @@ void DrawUI(GLFWwindow *window)
     ImGui::NewFrame();
 
     ImGui::Begin("Debug window");
-    ImGui::Text("Render mode: %s", g_renderModesStr[static_cast<uint32_t>(g_renderMode)]);
-    ImGui::Combo("Shadows", reinterpret_cast<int *>(&g_shadowMapsMode), g_disableEnableList, IM_ARRAYSIZE(g_disableEnableList));
-    ImGui::Combo("Bump Mapping", reinterpret_cast<int *>(&g_bumpMappingEnabled), g_disableEnableList, IM_ARRAYSIZE(g_disableEnableList));
-    ImGui::SliderFloat("Bumpmap scale factor", &g_bumpMapScaleFactor, 0.0001f, 0.01f, "%.5f");
-    ImGui::InputFloat3("Camera pos:", g_camera.pos.data, 1);
-    ImGui::InputFloat2("Camera XY rads:", &g_camera.xWorldAngle, 1);
+    ImGui::Combo("Render Mode", reinterpret_cast<int *>(&g_renderMode), g_renderModesStr, static_cast<uint32_t>(eRenderMode::Count));
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::InputFloat3("Camera Position", g_camera.pos.data, 1);
+    ImGui::InputFloat2("Camera XY Rads", &g_camera.xWorldAngle, 1);
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    ImGui::Text("Features");
+    {
+        static bool enableShadowMappingCheckBoxValue = static_cast<bool>(g_shadowMapsMode);
+        ImGui::Checkbox("Shadow Mapping", &enableShadowMappingCheckBoxValue);
+        g_shadowMapsMode = static_cast<bool>(enableShadowMappingCheckBoxValue);
+
+        static bool enableBumpMappingCheckboxValue = static_cast<bool>(g_bumpMappingEnabled);
+        ImGui::Checkbox("Bump Mapping", &enableBumpMappingCheckboxValue);
+        g_bumpMappingEnabled = static_cast<bool>(enableBumpMappingCheckboxValue);
+        ImGui::SliderFloat("Bump map scale factor", &g_bumpMapScaleFactor, 0.0001f, 0.01f, "%.5f");
+
+        static bool enableTaaCheckboxValue = static_cast<bool>(g_taaBuffer.enableTAA);
+        ImGui::Checkbox("TAA", &enableTaaCheckboxValue);
+        g_taaBuffer.enableTAA = static_cast<decltype(g_taaBuffer.enableTAA)>(enableTaaCheckboxValue);
+
+        static bool enabledToneMappingCheckboxValue = static_cast<bool>(g_toneMappingEnabled);
+        ImGui::Checkbox("Tone Mapping", &enabledToneMappingCheckboxValue);
+        g_toneMappingEnabled = static_cast<decltype(g_toneMappingEnabled)>(enabledToneMappingCheckboxValue);
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
     ImGui::Text("Frame time: %.3f ms", 1000.0f / ImGui::GetIO().Framerate);
     ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
     ImGui::End();
@@ -309,21 +340,22 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
         CreateShaderProgramUniformBindings(
             desc.depthPrePass,
             UniformsDescriptor{
-                UniformsDescriptor::UI32{},
-                UniformsDescriptor::F1{},
-                UniformsDescriptor::F2{},
-                UniformsDescriptor::F3{},
-                UniformsDescriptor::F4{},
-                UniformsDescriptor::MAT4{
-                    {"uProjMat", "uViewMat"},
-                    {g_camera.proj.data, g_camera.view.data},
-                    {1, 1}},
-                UniformsDescriptor::ArrayUI32{},
-                UniformsDescriptor::ArrayF1{},
-                UniformsDescriptor::ArrayF2{},
-                UniformsDescriptor::ArrayF3{},
-                UniformsDescriptor::ArrayF4{},
-                UniformsDescriptor::ArrayMAT4{
+                UniformsDescriptor::PerFrameUI32{
+                    {"uTaaEnabledUint"}, {&g_taaBuffer.enableTAA}, {1}},
+                UniformsDescriptor::PerFrameFloat1{},
+                UniformsDescriptor::PerFrameFloat2{},
+                UniformsDescriptor::PerFrameFloat3{},
+                UniformsDescriptor::PerFrameFloat4{},
+                UniformsDescriptor::PerFrameMat4{
+                    {"uProjMat", "uProjUnjitMat", "uViewMat"},
+                    {g_camera.proj.data, g_taaBuffer.projUnjit.data, g_camera.view.data},
+                    {1, 1, 1}},
+                UniformsDescriptor::PerModelUI32{},
+                UniformsDescriptor::PerModelFloat1{},
+                UniformsDescriptor::PerModelFloat2{},
+                UniformsDescriptor::PerModelFloat3{},
+                UniformsDescriptor::PerModelFloat4{},
+                UniformsDescriptor::PerModelMat4{
                     {"uModelMat"},
                     {reinterpret_cast<float const *>(models.data())},
                     {offsetof(RenderModel, RenderModel::model)},
@@ -335,21 +367,21 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
         CreateShaderProgramUniformBindings(
             desc.shadowMapping,
             UniformsDescriptor{
-                UniformsDescriptor::UI32{},
-                UniformsDescriptor::F1{},
-                UniformsDescriptor::F2{},
-                UniformsDescriptor::F3{},
-                UniformsDescriptor::F4{},
-                UniformsDescriptor::MAT4{
+                UniformsDescriptor::PerFrameUI32{},
+                UniformsDescriptor::PerFrameFloat1{},
+                UniformsDescriptor::PerFrameFloat2{},
+                UniformsDescriptor::PerFrameFloat3{},
+                UniformsDescriptor::PerFrameFloat4{},
+                UniformsDescriptor::PerFrameMat4{
                     {"uProjMat", "uViewMat"},
                     {g_directLight.projection.data, g_directLight.view.data},
                     {1, 1}},
-                UniformsDescriptor::ArrayUI32{},
-                UniformsDescriptor::ArrayF1{},
-                UniformsDescriptor::ArrayF2{},
-                UniformsDescriptor::ArrayF3{},
-                UniformsDescriptor::ArrayF4{},
-                UniformsDescriptor::ArrayMAT4{
+                UniformsDescriptor::PerModelUI32{},
+                UniformsDescriptor::PerModelFloat1{},
+                UniformsDescriptor::PerModelFloat2{},
+                UniformsDescriptor::PerModelFloat3{},
+                UniformsDescriptor::PerModelFloat4{},
+                UniformsDescriptor::PerModelMat4{
                     {"uModelMat"},
                     {reinterpret_cast<float const *>(models.data())},
                     {offsetof(RenderModel, RenderModel::model)},
@@ -362,40 +394,44 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
             desc.lighting,
             UniformsDescriptor{
                 //uint32_t
-                UniformsDescriptor::UI32{
+                UniformsDescriptor::PerFrameUI32{
                     {"uRenderModeUint",
                      "uShadowMappingEnabledUint",
-                     "uBumpMappingEnabledUint"},
+                     "uBumpMappingEnabledUint",
+                     "uTaaEnabledUint"},
                     {reinterpret_cast<uint32_t *>(&g_renderMode),
                      &g_shadowMapsMode,
-                     &g_bumpMappingEnabled},
-                    {1, 1, 1}},
+                     &g_bumpMappingEnabled,
+                     &g_taaBuffer.enableTAA},
+                    {1, 1, 1, 1}},
                 //floats
-                UniformsDescriptor::F1{
+                UniformsDescriptor::PerFrameFloat1{
                     {"uBumpMapScaleFactorFloat"},
                     {&g_bumpMapScaleFactor},
                     {1}},
-                UniformsDescriptor::F2{},
+                UniformsDescriptor::PerFrameFloat2{},
                 //float3
-                UniformsDescriptor::F3{
+                UniformsDescriptor::PerFrameFloat3{
                     {"uCameraPos", "uPointLightPosVec3Array"},
                     {g_camera.pos.data,
                      g_pointLights[0].data},
                     {1, g_pointLightCount}},
-                UniformsDescriptor::F4{},
+                UniformsDescriptor::PerFrameFloat4{},
                 //mat4
-                UniformsDescriptor::MAT4{
+                UniformsDescriptor::PerFrameMat4{
                     {"uProjMat",
+                     "uProjUnjitMat",
                      "uViewMat",
                      "uDirLightProjMat",
                      "uDirLightViewMat"},
                     {g_camera.proj.data,
+                     g_taaBuffer.projUnjit.data,
                      g_camera.view.data,
                      g_directLight.projection.data,
                      g_directLight.view.data},
-                    {1, 1, 1, 1}},
+                    {1, 1, 1, 1, 1}},
                 //uint32_t array
-                UniformsDescriptor::ArrayUI32{
+                UniformsDescriptor::PerModelUI32{
                     {"uBumpMapAvailableUint",
                      "uMetallicMapAvailableUint",
                      "uRoughnessMapAvailableUint",
@@ -417,17 +453,17 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                      sizeof(RenderModel),
                      sizeof(RenderModel)}},
                 //float1
-                UniformsDescriptor::ArrayF1{},
-                UniformsDescriptor::ArrayF2{},
+                UniformsDescriptor::PerModelFloat1{},
+                UniformsDescriptor::PerModelFloat2{},
                 //float3
-                UniformsDescriptor::ArrayF3{
+                UniformsDescriptor::PerModelFloat3{
                     {"uColor"},
                     {reinterpret_cast<float const *>(models.data())},
                     {offsetof(RenderModel, RenderModel::color)},
                     {sizeof(RenderModel)}},
-                UniformsDescriptor::ArrayF4{},
+                UniformsDescriptor::PerModelFloat4{},
                 //mat4
-                UniformsDescriptor::ArrayMAT4{
+                UniformsDescriptor::PerModelMat4{
                     {"uModelMat"},
                     {reinterpret_cast<float const *>(models.data())},
                     {offsetof(RenderModel, RenderModel::model)},
@@ -439,28 +475,29 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
         CreateShaderProgramUniformBindings(
             desc.velocity,
             UniformsDescriptor{
-                UniformsDescriptor::UI32{},
-                UniformsDescriptor::F1{},
-                UniformsDescriptor::F2{},
-                UniformsDescriptor::F3{},
-                UniformsDescriptor::F4{},
-                UniformsDescriptor::MAT4{
+                UniformsDescriptor::PerFrameUI32{
+                    {"uTaaEnabledUint"}, {&g_taaBuffer.enableTAA}, {1}},
+                UniformsDescriptor::PerFrameFloat1{},
+                UniformsDescriptor::PerFrameFloat2{},
+                UniformsDescriptor::PerFrameFloat3{},
+                UniformsDescriptor::PerFrameFloat4{},
+                UniformsDescriptor::PerFrameMat4{
                     {"uPrevViewMat4",
-                     "uPrevProjMat4",
+                     "uPrevProjUnjitMat4",
                      "uViewMat4",
-                     "uProjMat4"},
+                     "uProjUnjitMat4"},
                     {g_taaBuffer.prevView.data,
-                     g_taaBuffer.prevProj.data,
+                     g_taaBuffer.prevProjUnjit.data,
                      g_camera.view.data,
-                     g_camera.proj.data},
+                     g_taaBuffer.projUnjit.data},
                     {1, 1, 1, 1},
                 },
-                UniformsDescriptor::ArrayUI32{},
-                UniformsDescriptor::ArrayF1{},
-                UniformsDescriptor::ArrayF2{},
-                UniformsDescriptor::ArrayF3{},
-                UniformsDescriptor::ArrayF4{},
-                UniformsDescriptor::ArrayMAT4{
+                UniformsDescriptor::PerModelUI32{},
+                UniformsDescriptor::PerModelFloat1{},
+                UniformsDescriptor::PerModelFloat2{},
+                UniformsDescriptor::PerModelFloat3{},
+                UniformsDescriptor::PerModelFloat4{},
+                UniformsDescriptor::PerModelMat4{
                     {"uPrevModelMat4", "uModelMat4"},
                     {reinterpret_cast<float const *>(g_taaBuffer.prevModels.data()),
                      reinterpret_cast<float const *>(models.data())},
@@ -474,18 +511,19 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
         CreateShaderProgramUniformBindings(
             desc.toneMapping,
             UniformsDescriptor{
-                UniformsDescriptor::UI32{},
-                UniformsDescriptor::F1{},
-                UniformsDescriptor::F2{},
-                UniformsDescriptor::F3{},
-                UniformsDescriptor::F4{},
-                UniformsDescriptor::MAT4{},
-                UniformsDescriptor::ArrayUI32{},
-                UniformsDescriptor::ArrayF1{},
-                UniformsDescriptor::ArrayF2{},
-                UniformsDescriptor::ArrayF3{},
-                UniformsDescriptor::ArrayF4{},
-                UniformsDescriptor::ArrayMAT4{},
+                UniformsDescriptor::PerFrameUI32{
+                    {"uToneMappingEnabledUint"}, {&g_toneMappingEnabled}, {1}},
+                UniformsDescriptor::PerFrameFloat1{},
+                UniformsDescriptor::PerFrameFloat2{},
+                UniformsDescriptor::PerFrameFloat3{},
+                UniformsDescriptor::PerFrameFloat4{},
+                UniformsDescriptor::PerFrameMat4{},
+                UniformsDescriptor::PerModelUI32{},
+                UniformsDescriptor::PerModelFloat1{},
+                UniformsDescriptor::PerModelFloat2{},
+                UniformsDescriptor::PerModelFloat3{},
+                UniformsDescriptor::PerModelFloat4{},
+                UniformsDescriptor::PerModelMat4{},
             });
     }
 
@@ -493,14 +531,18 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
         CreateShaderProgramUniformBindings(
             desc.taa,
             UniformsDescriptor{
-                UniformsDescriptor::UI32{
-                    {"uFrameCountUint"}, {&g_taaBuffer.count}, {1}},
-                UniformsDescriptor::F1{},
-                UniformsDescriptor::F2{
+                UniformsDescriptor::PerFrameUI32{
+                    {"uFrameCountUint",
+                     "uTaaEnabledUint"},
+                    {&g_taaBuffer.count,
+                     &g_taaBuffer.enableTAA},
+                    {1, 1}},
+                UniformsDescriptor::PerFrameFloat1{},
+                UniformsDescriptor::PerFrameFloat2{
                     {"uJitterVec2"}, {g_taaBuffer.jitter.data}, {1}},
-                UniformsDescriptor::F3{},
-                UniformsDescriptor::F4{},
-                UniformsDescriptor::MAT4{
+                UniformsDescriptor::PerFrameFloat3{},
+                UniformsDescriptor::PerFrameFloat4{},
+                UniformsDescriptor::PerFrameMat4{
                     {"uViewMat",
                      "uProjMat",
                      "uPrevViewMat",
@@ -510,12 +552,12 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                      g_taaBuffer.prevView.data,
                      g_taaBuffer.prevProj.data},
                     {1, 1, 1, 1}},
-                UniformsDescriptor::ArrayUI32{},
-                UniformsDescriptor::ArrayF1{},
-                UniformsDescriptor::ArrayF2{},
-                UniformsDescriptor::ArrayF3{},
-                UniformsDescriptor::ArrayF4{},
-                UniformsDescriptor::ArrayMAT4{},
+                UniformsDescriptor::PerModelUI32{},
+                UniformsDescriptor::PerModelFloat1{},
+                UniformsDescriptor::PerModelFloat2{},
+                UniformsDescriptor::PerModelFloat3{},
+                UniformsDescriptor::PerModelFloat4{},
+                UniformsDescriptor::PerModelMat4{},
             });
     }
 
@@ -523,18 +565,18 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
         CreateShaderProgramUniformBindings(
             desc.debug,
             UniformsDescriptor{
-                UniformsDescriptor::UI32{},
-                UniformsDescriptor::F1{},
-                UniformsDescriptor::F2{},
-                UniformsDescriptor::F3{},
-                UniformsDescriptor::F4{},
-                UniformsDescriptor::MAT4{},
-                UniformsDescriptor::ArrayUI32{},
-                UniformsDescriptor::ArrayF1{},
-                UniformsDescriptor::ArrayF2{},
-                UniformsDescriptor::ArrayF3{},
-                UniformsDescriptor::ArrayF4{},
-                UniformsDescriptor::ArrayMAT4{},
+                UniformsDescriptor::PerFrameUI32{},
+                UniformsDescriptor::PerFrameFloat1{},
+                UniformsDescriptor::PerFrameFloat2{},
+                UniformsDescriptor::PerFrameFloat3{},
+                UniformsDescriptor::PerFrameFloat4{},
+                UniformsDescriptor::PerFrameMat4{},
+                UniformsDescriptor::PerModelUI32{},
+                UniformsDescriptor::PerModelFloat1{},
+                UniformsDescriptor::PerModelFloat2{},
+                UniformsDescriptor::PerModelFloat3{},
+                UniformsDescriptor::PerModelFloat4{},
+                UniformsDescriptor::PerModelMat4{},
             });
     }
 }
@@ -552,8 +594,6 @@ void UpdateModels(std::vector<RenderModel> &models)
 void RenderPassDepthPrePass(Pipeline &pipeline, std::vector<RenderModel> const &models)
 {
     g_camera.view = CreateViewMatrix(g_camera.pos, g_camera.xWorldAngle, g_camera.yWorldAngle);
-    g_camera.proj = sr::math::CreatePerspectiveProjectionMatrix(
-        g_camera.near, g_camera.far, g_camera.fov, g_camera.aspect);
     // g_camera.proj = sr::math::CreateOrthographicProjectionMatrix(
     //     -2048.f, 2048.f, -2048.f, 2048.f, -2000.f, 1500.f);
     const uint32_t taaSampleIndex = g_taaBuffer.count % 16;
@@ -578,9 +618,10 @@ void RenderPassDepthPrePass(Pipeline &pipeline, std::vector<RenderModel> const &
         //Note: Below is Inside approach, might be better that mine
         //g_camera.proj = sr::math::CreatePerspectiveProjectionMatrix(
         //    xm * cn, xp * cn, ym * cn, yp * cn, cn, cf);
+        g_taaBuffer.projUnjit = sr::math::CreatePerspectiveProjectionMatrix(
+            g_camera.near, g_camera.far, g_camera.fov, g_camera.aspect);
         g_camera.proj = sr::math::Mul(
-            sr::math::CreateTranslationMatrix(oneJitterX, oneJitterY, 0),
-            g_camera.proj);
+            sr::math::CreateTranslationMatrix(oneJitterX, oneJitterY, 0), g_taaBuffer.projUnjit);
     }
 
     int32_t const width = pipeline.depthPrePass.width;
@@ -624,6 +665,7 @@ void RenderPassTAA(Pipeline &pipeline)
     pipeline.taa.subPasses[1].active = !pipeline.taa.subPasses[0].active;
 
     g_taaBuffer.prevProj = g_camera.proj;
+    g_taaBuffer.prevProjUnjit = g_taaBuffer.projUnjit;
     g_taaBuffer.prevView = g_camera.view;
     g_taaBuffer.count++;
 }

@@ -3,17 +3,18 @@
 layout (location = 10) uniform vec3 uColor;
 layout (location = 11) uniform mat4 uModelMat;
 
-layout (location = 17) uniform uint uRenderModeUint;
-layout (location = 18) uniform uint uShadowMappingEnabledUint;
-layout (location = 19) uniform uint uBumpMapAvailableUint;
-layout (location = 20) uniform uint uMetallicMapAvailableUint;
-layout (location = 21) uniform uint uRoughnessMapAvailableUint;
-layout (location = 22) uniform uint uBumpMappingEnabledUint;
-layout (location = 23) uniform float uBumpMapScaleFactorFloat;
-layout (location = 24) uniform vec3 uCameraPos;
-layout (location = 26) uniform uint uDebugRenderModeAvailableUint;
-layout (location = 27) uniform uint uBrdfUint;
-layout (location = 28) uniform vec3 uPointLightPosVec3Array[5];
+layout (location = 20) uniform uint uRenderModeUint;
+layout (location = 21) uniform uint uTaaEnabledUint;
+layout (location = 22) uniform uint uShadowMappingEnabledUint;
+layout (location = 23) uniform uint uBumpMapAvailableUint;
+layout (location = 24) uniform uint uMetallicMapAvailableUint;
+layout (location = 26) uniform uint uRoughnessMapAvailableUint;
+layout (location = 27) uniform uint uBumpMappingEnabledUint;
+layout (location = 28) uniform float uBumpMapScaleFactorFloat;
+layout (location = 29) uniform vec3 uCameraPos;
+layout (location = 30) uniform uint uDebugRenderModeAvailableUint;
+layout (location = 31) uniform uint uBrdfUint;
+layout (location = 32) uniform vec3 uPointLightPosVec3Array[5];
 
 layout (binding = 0) uniform sampler2D uShadowMapSampler2D;
 layout (binding = 1) uniform sampler2D uAlbedoMapSampler2D;
@@ -276,7 +277,7 @@ void main()
             outColor = vec4(radiance, 1);
         }
     }
-    else if (uRenderModeUint == 1) // Normalf
+    else if (uRenderModeUint == 1) // Normal
     {
         outColor = vec4((n + 1) * 0.5f, 1);
     }

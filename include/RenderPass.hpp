@@ -104,7 +104,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.clearBufferMask = GL_DEPTH_BUFFER_BIT;
 
         auto const name = "Depth Pre-pass";
-        pipeline.depthPrePass = CreateRenderPass(&desc, 1, programs.depthPrePass, width, height, name, std::strlen(name));
+        pipeline.depthPrePass = CreateRenderPass(
+            &desc, 1, programs.depthPrePass, width, height, name, static_cast<uint8_t>(std::strlen(name)));
     }
 
     {
@@ -119,7 +120,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.clearBufferMask = GL_DEPTH_BUFFER_BIT;
 
         auto const name = "Shadow Mapping";
-        pipeline.shadowMapping = CreateRenderPass(&desc, 1, programs.shadowMapping, 4096, 4096, name, std::strlen(name));
+        pipeline.shadowMapping = CreateRenderPass(
+            &desc, 1, programs.shadowMapping, 4096, 4096, name, static_cast<uint8_t>(std::strlen(name)));
     }
 
     {
@@ -140,7 +142,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.clearColor = {1, 1, 1, 1};
 
         auto const name = "Lighting";
-        pipeline.lighting = CreateRenderPass(&desc, 1, programs.lighting, width, height, name, std::strlen(name));
+        pipeline.lighting = CreateRenderPass(
+            &desc, 1, programs.lighting, width, height, name, static_cast<uint8_t>(std::strlen(name)));
     }
 
     {
@@ -156,7 +159,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
 
         auto const name = "Velocity";
-        pipeline.velocity = CreateRenderPass(&desc, 1, programs.velocity, width, height, name, std::strlen(name));
+        pipeline.velocity = CreateRenderPass(
+            &desc, 1, programs.velocity, width, height, name, static_cast<uint8_t>(std::strlen(name)));
     }
 
     {
@@ -174,7 +178,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
 
         auto const name = "Tone Mapping";
-        pipeline.toneMapping = CreateRenderPass(&desc, 1, programs.toneMapping, width, height, name, std::strlen(name));
+        pipeline.toneMapping = CreateRenderPass(
+            &desc, 1, programs.toneMapping, width, height, name, static_cast<uint8_t>(std::strlen(name)));
     }
 
     {
@@ -209,7 +214,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc[1].clearBufferMask = desc[0].clearBufferMask;
 
         auto const name = "Temporal Pass";
-        pipeline.taa = CreateRenderPass(desc, 2, programs.taa, width, height, name, std::strlen(name));
+        pipeline.taa = CreateRenderPass(
+            desc, 2, programs.taa, width, height, name, static_cast<uint8_t>(std::strlen(name)));
         pipeline.taa.subPasses[1].active = false;
     }
 
@@ -248,7 +254,8 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
 
         auto const name = "Debug";
-        pipeline.debug = CreateRenderPass(&desc, 1, programs.debug, width, height, name, std::strlen(name));
+        pipeline.debug = CreateRenderPass(
+            &desc, 1, programs.debug, width, height, name, static_cast<uint8_t>(std::strlen(name)));
     }
 
     return pipeline;
@@ -265,67 +272,67 @@ void DeleteRenderPipeline(Pipeline &pipeline)
     DeleteRenderPass(pipeline.debug);
 }
 
-void UpdateGlobalUniforms(ShaderProgram const &program)
+void UpdatePerFrameUniforms(ShaderProgram const &program)
 {
-    for (auto const &uniform : program.ui32)
+    for (auto const &uniform : program.perFrameUniformBindings.UI32)
     {
         glUniform1uiv(uniform.location, uniform.count, uniform.data);
     }
-    for (auto const &uniform : program.f1)
+    for (auto const &uniform : program.perFrameUniformBindings.Float1)
     {
         glUniform1fv(uniform.location, uniform.count, uniform.data);
     }
-    for (auto const &uniform : program.f2)
+    for (auto const &uniform : program.perFrameUniformBindings.Float2)
     {
         glUniform2fv(uniform.location, uniform.count, uniform.data);
     }
-    for (auto const &uniform : program.f3)
+    for (auto const &uniform : program.perFrameUniformBindings.Float3)
     {
         glUniform3fv(uniform.location, uniform.count, uniform.data);
     }
-    for (auto const &uniform : program.f4)
+    for (auto const &uniform : program.perFrameUniformBindings.Float4)
     {
         glUniform4fv(uniform.location, uniform.count, uniform.data);
     }
-    for (auto const &uniform : program.f16)
+    for (auto const &uniform : program.perFrameUniformBindings.Float16)
     {
         glUniformMatrix4fv(uniform.location, uniform.count, GL_TRUE, uniform.data);
     }
 }
 
-void UpdateLocalUniforms(ShaderProgram const &program, uint64_t index)
+void UpdatePerModelUniforms(ShaderProgram const &program, uint64_t index)
 {
-    for (auto const &uniform : program.ui32Array)
+    for (auto const &uniform : program.perModelUniformBindings.UI32)
     {
         uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
         data = data + uniform.offset + uniform.stride * index;
         glUniform1ui(uniform.location, *reinterpret_cast<uint32_t const *>(data));
     }
-    for (auto const &uniform : program.f1Array)
+    for (auto const &uniform : program.perModelUniformBindings.Float1)
     {
         uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
         data = data + uniform.offset + uniform.stride * index;
         glUniform1f(uniform.location, *reinterpret_cast<float const *>(data));
     }
-    for (auto const &uniform : program.f2Array)
+    for (auto const &uniform : program.perModelUniformBindings.Float2)
     {
         uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
         data = data + uniform.offset + uniform.stride * index;
         glUniform2fv(uniform.location, 1, reinterpret_cast<float const *>(data));
     }
-    for (auto const &uniform : program.f3Array)
+    for (auto const &uniform : program.perModelUniformBindings.Float3)
     {
         uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
         data = data + uniform.offset + uniform.stride * index;
         glUniform3fv(uniform.location, 1, reinterpret_cast<float const *>(data));
     }
-    for (auto const &uniform : program.f4Array)
+    for (auto const &uniform : program.perModelUniformBindings.Float4)
     {
         uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
         data = data + uniform.offset + uniform.stride * index;
         glUniform4fv(uniform.location, 1, reinterpret_cast<float const *>(data));
     }
-    for (auto const &uniform : program.f16Array)
+    for (auto const &uniform : program.perModelUniformBindings.Float16)
     {
         uint8_t const *data = reinterpret_cast<uint8_t const *>(uniform.data);
         data = data + uniform.offset + uniform.stride * index;
@@ -426,7 +433,7 @@ void DrawModel(RenderModel const &model)
 
 void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64_t modelCount)
 {
-    glPushGroupMarkerEXT(pass.name.length, pass.name.data);
+    //glPushGroupMarkerEXT(pass.name.length, pass.name.data);
 
     for (uint8_t i = 0; i < pass.subPassCount; ++i)
     {
@@ -447,12 +454,12 @@ void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64
                 glClear(subPass.desc.clearBufferMask);
 
                 glUseProgram(pass.program.handle);
-                UpdateGlobalUniforms(pass.program);
+                UpdatePerFrameUniforms(pass.program);
                 BindRenderPassDependencies(subPass.desc.dependencies, subPass.desc.dependencyCount);
 
                 for (uint64_t j = 0; j < modelCount; ++j)
                 {
-                    UpdateLocalUniforms(pass.program, j);
+                    UpdatePerModelUniforms(pass.program, j);
                     BindRenderModelTextures(models[j], subPass.desc.dependencyCount);
                     DrawModel(models[j]);
                     UnbindRenderModelTextures(models[j], subPass.desc.dependencyCount);
@@ -465,7 +472,7 @@ void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64
         }
     }
 
-    glPopGroupMarkerEXT();
+    //glPopGroupMarkerEXT();
 }
 
 void ExecuteBackBufferBlitRenderPass(GLuint fbo, GLenum attachment, int32_t width, int32_t height)

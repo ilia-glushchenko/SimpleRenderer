@@ -50,7 +50,7 @@ using UniformBindingV4FArray = UniformBindingF1Array;
 using UniformBindingM4FArray = UniformBindingF1Array;
 
 template <typename T>
-struct GlobalUniformDescriptor
+struct FrameUniformDescriptor
 {
     std::vector<const char *> names;
     std::vector<T const *> data;
@@ -58,7 +58,7 @@ struct GlobalUniformDescriptor
 };
 
 template <typename T>
-struct LocalUniformDescriptor
+struct ModelUniformDescriptor
 {
     std::vector<const char *> names;
     std::vector<T const *> data;
@@ -68,51 +68,59 @@ struct LocalUniformDescriptor
 
 struct UniformsDescriptor
 {
-    using UI32 = GlobalUniformDescriptor<uint32_t>;
-    using F1 = GlobalUniformDescriptor<float>;
-    using F2 = GlobalUniformDescriptor<float>;
-    using F3 = GlobalUniformDescriptor<float>;
-    using F4 = GlobalUniformDescriptor<float>;
-    using MAT4 = GlobalUniformDescriptor<float>;
+    using PerFrameUI32 = FrameUniformDescriptor<uint32_t>;
+    using PerFrameFloat1 = FrameUniformDescriptor<float>;
+    using PerFrameFloat2 = FrameUniformDescriptor<float>;
+    using PerFrameFloat3 = FrameUniformDescriptor<float>;
+    using PerFrameFloat4 = FrameUniformDescriptor<float>;
+    using PerFrameMat4 = FrameUniformDescriptor<float>;
 
-    using ArrayUI32 = LocalUniformDescriptor<uint32_t>;
-    using ArrayF1 = LocalUniformDescriptor<float>;
-    using ArrayF2 = LocalUniformDescriptor<float>;
-    using ArrayF3 = LocalUniformDescriptor<float>;
-    using ArrayF4 = LocalUniformDescriptor<float>;
-    using ArrayMAT4 = LocalUniformDescriptor<float>;
+    using PerModelUI32 = ModelUniformDescriptor<uint32_t>;
+    using PerModelFloat1 = ModelUniformDescriptor<float>;
+    using PerModelFloat2 = ModelUniformDescriptor<float>;
+    using PerModelFloat3 = ModelUniformDescriptor<float>;
+    using PerModelFloat4 = ModelUniformDescriptor<float>;
+    using PerModelMat4 = ModelUniformDescriptor<float>;
 
-    GlobalUniformDescriptor<uint32_t> ui32;
-    GlobalUniformDescriptor<float> float1;
-    GlobalUniformDescriptor<float> float2;
-    GlobalUniformDescriptor<float> float3;
-    GlobalUniformDescriptor<float> float4;
-    GlobalUniformDescriptor<float> mat4;
+    FrameUniformDescriptor<uint32_t> ui32;
+    FrameUniformDescriptor<float> float1;
+    FrameUniformDescriptor<float> float2;
+    FrameUniformDescriptor<float> float3;
+    FrameUniformDescriptor<float> float4;
+    FrameUniformDescriptor<float> mat4;
 
-    LocalUniformDescriptor<uint32_t> ui32Array;
-    LocalUniformDescriptor<float> float1Array;
-    LocalUniformDescriptor<float> float2Array;
-    LocalUniformDescriptor<float> float3Array;
-    LocalUniformDescriptor<float> float4Array;
-    LocalUniformDescriptor<float> mat4Array;
+    ModelUniformDescriptor<uint32_t> ui32Array;
+    ModelUniformDescriptor<float> float1Array;
+    ModelUniformDescriptor<float> float2Array;
+    ModelUniformDescriptor<float> float3Array;
+    ModelUniformDescriptor<float> float4Array;
+    ModelUniformDescriptor<float> mat4Array;
+};
+
+struct PerFrameUniformBindings
+{
+    std::vector<UniformBindingUI32> UI32;
+    std::vector<UniformBindingF1> Float1;
+    std::vector<UniformBindingV2F> Float2;
+    std::vector<UniformBindingV3F> Float3;
+    std::vector<UniformBindingV4F> Float4;
+    std::vector<UniformBindingM4F> Float16;
+};
+
+struct PerModleUniformBindings
+{
+    std::vector<UniformBindingUI32Array> UI32;
+    std::vector<UniformBindingF1Array> Float1;
+    std::vector<UniformBindingV2FArray> Float2;
+    std::vector<UniformBindingV3FArray> Float3;
+    std::vector<UniformBindingV4FArray> Float4;
+    std::vector<UniformBindingM4FArray> Float16;
 };
 
 struct ShaderProgram
 {
-    std::vector<UniformBindingUI32> ui32;
-    std::vector<UniformBindingF1> f1;
-    std::vector<UniformBindingV2F> f2;
-    std::vector<UniformBindingV3F> f3;
-    std::vector<UniformBindingV4F> f4;
-    std::vector<UniformBindingM4F> f16;
-
-    std::vector<UniformBindingUI32Array> ui32Array;
-    std::vector<UniformBindingF1Array> f1Array;
-    std::vector<UniformBindingV2FArray> f2Array;
-    std::vector<UniformBindingV3FArray> f3Array;
-    std::vector<UniformBindingV4FArray> f4Array;
-    std::vector<UniformBindingM4FArray> f16Array;
-
+    PerFrameUniformBindings perFrameUniformBindings;
+    PerModleUniformBindings perModelUniformBindings;
     GLuint vertexShaderHandle = 0;
     GLuint fragmentShaderHandle = 0;
     GLuint handle = 0;
@@ -223,10 +231,13 @@ struct Pipeline
 
 struct TAABuffer
 {
-    std::vector<sr::math::Matrix4x4> prevModels;
+    sr::math::Matrix4x4 projUnjit = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 prevView = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 prevProj = sr::math::CreateIdentityMatrix();
+    sr::math::Matrix4x4 prevProjUnjit = sr::math::CreateIdentityMatrix();
+    std::vector<sr::math::Matrix4x4> prevModels;
     sr::math::Vec2 jitter = {};
+    uint32_t enableTAA = 1;
     uint32_t count = 0;
 };
 

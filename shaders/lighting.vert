@@ -6,6 +6,8 @@ layout (location = 12) uniform mat4 uViewMat;
 layout (location = 13) uniform mat4 uProjMat;
 layout (location = 14) uniform mat4 uDirLightViewMat;
 layout (location = 15) uniform mat4 uDirLightProjMat;
+layout (location = 16) uniform mat4 uProjUnjitMat;
+layout (location = 21) uniform uint uTaaEnabledUint;
 
 layout (location = 0) in vec3 aPosition;
 layout (location = 1) in vec3 aNormal;
@@ -31,5 +33,6 @@ void main()
 
     uv = aUV;
 
-    gl_Position = uProjMat * uViewMat * uModelMat * vec4(aPosition, 1);
+    mat4 projection = bool(uTaaEnabledUint) ? uProjMat : uProjUnjitMat;
+    gl_Position = projection * uViewMat * uModelMat * vec4(aPosition, 1);
 }

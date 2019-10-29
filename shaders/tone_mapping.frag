@@ -1,5 +1,6 @@
 #version 460
 
+layout (location = 0) uniform uint uToneMappingEnabledUint;
 layout (location = 10, binding = 0) uniform sampler2D uLinearSpaceSceneReferredTextureSampler2D;
 layout (location = 0) in vec2 uv;
 layout (location = 0) out vec4 outColor;
@@ -80,5 +81,12 @@ void main()
 {
     //ToDo: Tone Mapping is not physically correct before TAA, can do better
     //  see https://de45xmedrsdbp.cloudfront.net/Resources/files/TemporalAA_small-59732822.pdf
-    outColor = vec4(ACESFitted(texture(uLinearSpaceSceneReferredTextureSampler2D, uv).rgb), 1);
+    if (bool(uToneMappingEnabledUint))
+    {
+        outColor = vec4(ACESFitted(texture(uLinearSpaceSceneReferredTextureSampler2D, uv).rgb), 1);
+    }
+    else
+    {
+        outColor = vec4(texture(uLinearSpaceSceneReferredTextureSampler2D, uv).rgb, 1);
+    }
 }

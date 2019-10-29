@@ -6,6 +6,7 @@ layout (location = 12) uniform mat4 uPrevViewMat;
 layout (location = 13) uniform mat4 uPrevProjMat;
 layout (location = 14) uniform uint uFrameCountUint;
 layout (location = 15) uniform vec2 uJitterVec2;
+layout (location = 16) uniform uint uTaaEnabledUint;
 
 layout (location = 20, binding = 0) uniform sampler2D uColorTextureSampler2D;
 layout (location = 21, binding = 1) uniform sampler2D uDepthTextureSampler2D;
@@ -21,8 +22,7 @@ layout (location = 0) out vec4 outColor;
 #define USE_YCoCg
 #define USE_CLIPPING
 #define USE_CLAMPING
-//#define USE_REPROJECTED_HISTORY_UV
-//#define USE_VELOCITY_CORRECTED_UV
+#define USE_VELOCITY_CORRECTED_UV
 
 float Linear2sRGB(float channel)
 {
@@ -314,7 +314,7 @@ vec4 TemporalReprojection()
 {
     vec4 reprojectedColor = vec4(0);
 
-    const float feedback = 1.0/12.0;
+    const float feedback = 0.05f;
     vec2 jitter = -uJitterVec2;
     vec3 fragPosPrevProj = ReverseReprojectFrag(uv, jitter);
 
@@ -325,15 +325,8 @@ vec4 TemporalReprojection()
     }
     else
     {
-        vec2 prevFrameUV = vec2(
-            0.5 * fragPosPrevProj.x + 0.5,
-            0.5 * fragPosPrevProj.y + 0.5);
-
-
-#ifdef USE_REPROJECTED_HISTORY_UV
-        vec2 historyUV = prevFrameUV;
-#elif  USE_VELOCITY_CORRECTED_UV
-        vec2 historyUV = uv - SampleVelocity(uv - jitter);
+#ifdef  USE_VELOCITY_CORRECTED_UV
+        vec2 historyUV = uv - SampleVelocity(uv);
 #else
         vec2 historyUV = uv;
 #endif
@@ -376,14 +369,15 @@ vec4 TemporalReprojection()
 
 void main()
 {
-    if (uFrameCountUint < 2)
+    if (bool(uTaaEnabledUint))
     {
-        outColor = ResolveColor(vec4(SampleColor(uColorTextureSampler2D, uv).rgb, 1));
+        outColor = uFrameCountUint < 2
+            ? ResolveColor(vec4(SampleColor(uColorTextureSampler2D, uv).rgb, 1))
+            : ResolveColor(TemporalReprojection());
     }
     else
     {
-        vec4 reprojectedColor = TemporalReprojection();
-        outColor = ResolveColor(reprojectedColor);
+        outColor = ResolveColor(vec4(SampleColor(uColorTextureSampler2D, uv).rgb, 1));
     }
 }
 
