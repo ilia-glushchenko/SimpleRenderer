@@ -433,7 +433,7 @@ void DrawModel(RenderModel const &model)
 
 void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64_t modelCount)
 {
-    //glPushGroupMarkerEXT(pass.name.length, pass.name.data);
+    glPushGroupMarkerEXT(pass.name.length, pass.name.data);
 
     for (uint8_t i = 0; i < pass.subPassCount; ++i)
     {
@@ -472,7 +472,7 @@ void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64
         }
     }
 
-    //glPopGroupMarkerEXT();
+    glPopGroupMarkerEXT();
 }
 
 void ExecuteBackBufferBlitRenderPass(GLuint fbo, GLenum attachment, int32_t width, int32_t height)

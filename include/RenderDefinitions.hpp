@@ -6,10 +6,17 @@
 #pragma once
 
 #include "Math.hpp"
+#include "Geometry.hpp"
 
 #include <glbinding/Binding.h>
 #include <glbinding/gl46ext/gl.h>
 using namespace gl;
+
+namespace sr::load
+{
+    struct Geometry;
+    struct MaterialSource;
+}
 
 struct UniformBindingUI32
 {
@@ -264,12 +271,25 @@ struct RenderModel
     GLuint bumpTexture = 0;
     GLuint metallicTexture = 0;
     GLuint roughnessTexture = 0;
-    uint32_t indexCount = 0;
+    uint32_t indexCount = 0; //The amount of indices in the index buffer
     sr::math::Matrix4x4 model = sr::math::CreateIdentityMatrix();
     sr::math::Vec3 color = {0.5f, 0.5f, 0.5f};
-    GLuint debugRenderModel = 0;
+    sr::math::Vec3 center = {};
+    sr::geo::AABB aabb = {};
+    GLuint debugRenderModel = 0; //This model is for debug rendering only
     //ToDo: Better material system is needed
     GLuint brdf = 0;
+};
+
+struct RenderModelCreateInfo
+{
+    sr::load::Geometry const *geometry = nullptr;
+    std::vector<BufferDescriptor> const *vertexBufferDescriptors = nullptr;
+    BufferDescriptor const *indexBufferDescriptor = nullptr;
+    sr::load::MaterialSource const *material = nullptr;
+    sr::math::Matrix4x4 model;
+    sr::math::Vec3 color;
+    GLuint debugRenderModel;
 };
 
 struct DirectionalLightSource

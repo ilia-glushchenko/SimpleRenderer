@@ -68,22 +68,14 @@ struct Vec3
         float data[3];
     };
 
-    Vec3 &operator+=(Vec3 const &other)
-    {
-        return *this = *this + other;
-    }
-
     Vec3 &operator-=(Vec3 const &other)
     {
         return *this = *this - other;
     }
 
-    constexpr Vec3 operator+(Vec3 other) const
+    Vec3 &operator+=(Vec3 const &other)
     {
-        other.x += x;
-        other.y += y;
-        other.z += z;
-        return other;
+        return *this = *this + other;
     }
 
     constexpr Vec3 operator-(Vec3 other) const
@@ -91,12 +83,22 @@ struct Vec3
         other.x = x - other.x;
         other.y = y - other.y;
         other.z = z - other.z;
+
         return other;
     }
 
-    constexpr Vec3 operator/(float s) const
+    constexpr Vec3 operator+(Vec3 other) const
     {
-        return {x / s, y / s, z / s};
+        other.x += x;
+        other.y += y;
+        other.z += z;
+
+        return other;
+    }
+
+    constexpr Vec3 operator-() const
+    {
+        return {-x, -y, -z};
     }
 
     constexpr Vec3 operator*(float s) const
@@ -104,9 +106,9 @@ struct Vec3
         return {x * s, y * s, z * s};
     }
 
-    constexpr Vec3 operator-() const
+    constexpr Vec3 operator/(float s) const
     {
-        return {-x, -y, -z};
+        return {x / s, y / s, z / s};
     }
 
     constexpr bool operator==(Vec3 const &other) const
@@ -146,6 +148,26 @@ struct Vec4
         return {-x, -y, -z, -w};
     }
 
+    constexpr Vec4 operator-(Vec4 other) const
+    {
+        other.x = x - other.x;
+        other.y = y - other.y;
+        other.z = z - other.z;
+        other.w = w - other.w;
+
+        return other;
+    }
+
+    constexpr Vec4 operator+(Vec4 other) const
+    {
+        other.x = x + other.x;
+        other.y = y + other.y;
+        other.z = z + other.z;
+        other.w = w + other.w;
+
+        return other;
+    }
+
     constexpr Vec4 operator*(float s) const
     {
         return {x * s, y * s, z * s, w * s};
@@ -154,6 +176,16 @@ struct Vec4
     constexpr Vec4 operator/(float s) const
     {
         return {x / s, y / s, z / s, w / s};
+    }
+
+    constexpr bool operator==(Vec4 const &other) const
+    {
+        return x == other.x && y == other.y && z == other.z && w == other.w;
+    }
+
+    constexpr bool operator!=(Vec4 const &other) const
+    {
+        return !(*this == other);
     }
 };
 

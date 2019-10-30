@@ -41,45 +41,53 @@ std::vector<uint32_t> CreateBuffers(std::vector<BufferDescriptor> const &bufferD
 
 } // namespace
 
-RenderModel CreateRenderModel(
-    std::vector<BufferDescriptor> const &bufferDescriptors,
-    BufferDescriptor const &indexBufferDescriptor,
-    sr::load::MaterialSource const &material)
+RenderModel CreateRenderModel(RenderModelCreateInfo const &createInfo)
 {
     RenderModel renderModel;
-    renderModel.indexCount = indexBufferDescriptor.count;
+    renderModel.indexCount = createInfo.indexBufferDescriptor->count;
 
-    renderModel.vbos = ::CreateBuffers(bufferDescriptors);
+    renderModel.vbos = ::CreateBuffers(*createInfo.vertexBufferDescriptors);
 
     glGenVertexArrays(1, &renderModel.vertexArrayObject);
     glBindVertexArray(renderModel.vertexArrayObject);
 
     renderModel.indexBuffer = ::CreateBuffer();
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, renderModel.indexBuffer);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexBufferDescriptor.size * indexBufferDescriptor.count, indexBufferDescriptor.data, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+                 createInfo.indexBufferDescriptor->size * createInfo.indexBufferDescriptor->count,
+                 createInfo.indexBufferDescriptor->data,
+                 GL_STATIC_DRAW);
 
-    if (material.albedo != nullptr)
+    if (createInfo.material->albedo != nullptr)
     {
-        renderModel.albedoTexture = CreateMipMappedTexture(*material.albedo);
+        renderModel.albedoTexture = CreateMipMappedTexture(*createInfo.material->albedo);
     }
-    if (material.normal != nullptr)
+    if (createInfo.material->normal != nullptr)
     {
-        renderModel.normalTexture = CreateMipMappedTexture(*material.normal);
+        renderModel.normalTexture = CreateMipMappedTexture(*createInfo.material->normal);
     }
-    if (material.bump != nullptr)
+    if (createInfo.material->bump != nullptr)
     {
-        renderModel.bumpTexture = CreateMipMappedTexture(*material.bump);
+        renderModel.bumpTexture = CreateMipMappedTexture(*createInfo.material->bump);
     }
-    if (material.metallic != nullptr)
+    if (createInfo.material->metallic != nullptr)
     {
-        renderModel.metallicTexture = CreateMipMappedTexture(*material.metallic);
+        renderModel.metallicTexture = CreateMipMappedTexture(*createInfo.material->metallic);
     }
-    if (material.roughness != nullptr)
+    if (createInfo.material->roughness != nullptr)
     {
-        renderModel.roughnessTexture = CreateMipMappedTexture(*material.roughness);
+        renderModel.roughnessTexture = CreateMipMappedTexture(*createInfo.material->roughness);
     }
 
-    renderModel.brdf = material.brdf == "marbel" ? 0 : 1;
+    renderModel.model = createInfo.model;
+    renderModel.color = createInfo.color;
+    renderModel.center = sr::geo::CalculateCenterOfMass(
+        createInfo.geometry->vertices.data(), createInfo.geometry->indices.data(), createInfo.geometry->indices.size());
+    renderModel.aabb = sr::geo::CalculateAABB(
+        createInfo.geometry->vertices.data(), createInfo.geometry->vertices.size(), renderModel.center, renderModel.model);
+
+    renderModel.debugRenderModel = createInfo.debugRenderModel;
+    renderModel.brdf = createInfo.material->brdf == "marbel" ? 0 : 1;
 
     return renderModel;
 }

@@ -25,7 +25,7 @@ constexpr uint32_t g_defaultHeight = 800;
 TAABuffer g_taaBuffer = {};
 
 bool g_captureMouse = false;
-bool g_drawUi = false;
+bool g_drawUi = true;
 bool g_isHotRealoadRequired = false;
 uint32_t g_shadowMapsMode = 1;
 uint32_t g_bumpMappingEnabled = 1;
@@ -261,10 +261,19 @@ std::vector<RenderModel> LoadModels(ShaderProgram const &program)
     sr::load::LoadOBJ("data\\models\\Sponza", "sponza.obj", geometries, materials);
     for (uint32_t i = 0; i < geometries.size(); ++i)
     {
-        models.push_back(CreateRenderModel(
-            sr::load::CreateBufferDescriptors(geometries[i]),
-            sr::load::CreateIndexBufferDescriptor(geometries[i]),
-            materials[geometries[i].material]));
+        auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(geometries[i]);
+        auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(geometries[i]);
+
+        RenderModelCreateInfo createInfo;
+        createInfo.color = {1, 0, 0};
+        createInfo.debugRenderModel = 0;
+        createInfo.geometry = &geometries[i];
+        createInfo.indexBufferDescriptor = &indexBufferDescriptor;
+        createInfo.material = &materials[createInfo.geometry->material];
+        createInfo.model = sr::math::CreateIdentityMatrix();
+        createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
+
+        models.push_back(CreateRenderModel(createInfo));
         LinkRenderModelToShaderProgram(
             program.handle, models[i], g_shaderAttributesPositionNormalUV);
     }
@@ -272,40 +281,58 @@ std::vector<RenderModel> LoadModels(ShaderProgram const &program)
     for (uint32_t i = 0; i < g_pointLightCount; ++i)
     {
         sr::load::LoadOBJ("data\\models\\box", "box.obj", geometries, materials);
-        models.push_back(
-            CreateRenderModel(
-                sr::load::CreateBufferDescriptors(geometries.back()),
-                sr::load::CreateIndexBufferDescriptor(geometries.back()),
-                {}));
-        LinkRenderModelToShaderProgram(
-            program.handle, models.back(), g_shaderAttributesPositionNormalUV);
-        models.back().color = sr::math::Vec3{1.f, 209 / 255.0f, 163 / 255.0f};
-        models.back().debugRenderModel = 1;
-        models.back().model = sr::math::Mul(
+
+        auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(geometries.back());
+        auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(geometries.back());
+        sr::load::MaterialSource const emptyMaterial = {};
+
+        RenderModelCreateInfo createInfo;
+        createInfo.color = sr::math::Vec3{1.f, 209 / 255.0f, 163 / 255.0f};
+        createInfo.debugRenderModel = 1;
+        createInfo.geometry = &geometries.back();
+        createInfo.indexBufferDescriptor = &indexBufferDescriptor;
+        createInfo.material = &emptyMaterial;
+        createInfo.model = sr::math::Mul(
             sr::math::CreateTranslationMatrix(g_pointLights[i]),
             sr::math::CreateScaleMatrix(10));
+        createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
+
+        models.push_back(CreateRenderModel(createInfo));
+        LinkRenderModelToShaderProgram(
+            program.handle, models.back(), g_shaderAttributesPositionNormalUV);
     }
 
     {
+        sr::load::LoadOBJ("data\\models\\quad", "quad.obj", geometries, materials);
+
+        auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(geometries.back());
+        auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(geometries.back());
+
         tinyobj::material_t material;
         material.diffuse_texname = "shfsaida_2K_Albedo.jpg";
         material.bump_texname = "shfsaida_2K_Bump.jpg";
         material.normal_texname = "shfsaida_2K_Normal.jpg";
         material.roughness_texname = "shfsaida_2K_Roughness.jpg";
-        sr::load::LoadOBJ("data\\models\\quad", "quad.obj", geometries, materials);
-        models.push_back(CreateRenderModel(
-            sr::load::CreateBufferDescriptors(geometries.back()),
-            sr::load::CreateIndexBufferDescriptor(geometries.back()),
-            sr::load::CreateMaterialSource(
-                "data\\materials\\2k\\Rock_Cliffs_shfsaida_2K_surface_ms", material)));
-        models.back().brdf = 0;
-        LinkRenderModelToShaderProgram(
-            program.handle, models.back(), g_shaderAttributesPositionNormalUV);
-        models.back().model = sr::math::Mul(
+        material.unknown_parameter["mat"] = "marbel";
+        auto const materialSource = sr::load::CreateMaterialSource(
+            "data\\materials\\2k\\Rock_Cliffs_shfsaida_2K_surface_ms", material);
+
+        RenderModelCreateInfo createInfo;
+        createInfo.color = {1, 0, 0};
+        createInfo.debugRenderModel = 0;
+        createInfo.geometry = &geometries.back();
+        createInfo.indexBufferDescriptor = &indexBufferDescriptor;
+        createInfo.material = &materialSource;
+        createInfo.model = sr::math::Mul(
             sr::math::CreateTranslationMatrix(0, 50.f, 0),
             sr::math::Mul(
                 sr::math::CreateScaleMatrix(100.f),
                 sr::math::CreateRotationMatrixY(6.28f * 0.65f)));
+        createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
+
+        models.push_back(CreateRenderModel(createInfo));
+        LinkRenderModelToShaderProgram(
+            program.handle, models.back(), g_shaderAttributesPositionNormalUV);
     }
 
     for (auto &material : materials)

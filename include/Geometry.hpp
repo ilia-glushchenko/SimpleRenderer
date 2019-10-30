@@ -6,6 +6,7 @@
 #pragma once
 
 #include <Math.hpp>
+#include <limits>
 #include <cassert>
 
 namespace sr::geo
@@ -40,43 +41,48 @@ inline AABB CalculateAABB(sr::math::Vec3 const *data, uint64_t length)
     assert(length > 1);
     assert(data[0] != data[1]);
 
-    AABB result;
+    AABB result = {
+        {-FLT_MAX, -FLT_MAX, -FLT_MAX},
+        {FLT_MAX, FLT_MAX, FLT_MAX}};
 
     for (uint64_t i = 0; i < length; ++i)
     {
-        result.max.x = result.max.x < data[i].x ? data[i].x : result.max.x;
-        result.max.y = result.max.y < data[i].y ? data[i].y : result.max.y;
-        result.max.z = result.max.z < data[i].z ? data[i].z : result.max.z;
-
         result.min.x = result.min.x > data[i].x ? data[i].x : result.min.x;
         result.min.y = result.min.y > data[i].y ? data[i].y : result.min.y;
         result.min.z = result.min.z > data[i].z ? data[i].z : result.min.z;
+
+        result.max.x = result.max.x < data[i].x ? data[i].x : result.max.x;
+        result.max.y = result.max.y < data[i].y ? data[i].y : result.max.y;
+        result.max.z = result.max.z < data[i].z ? data[i].z : result.max.z;
     }
 
     return result;
 }
 
-inline AABB CalculateAABB(sr::math::Vec3 const *data, uint64_t length, sr::math::Vec3 center, sr::math::Matrix4x4 model)
+inline AABB CalculateAABB(
+    sr::math::Vec3 const *data, uint64_t length, sr::math::Vec3 center, sr::math::Matrix4x4 model)
 {
     assert(data != nullptr);
     assert(length > 1);
     assert(data[0] != data[1]);
     assert(!IsNullMatrix(model));
 
-    AABB result;
+    AABB result = {
+        {-FLT_MAX, -FLT_MAX, -FLT_MAX},
+        {FLT_MAX, FLT_MAX, FLT_MAX}};
 
-    sr::math::Vec3 tmp;
+    sr::math::Vec4 vertex;
     for (uint64_t i = 0; i < length; ++i)
     {
-        tmp = sr::math::Mul(model, sr::math::Vec4{data[i].x, data[i].y, data[i].z, 1}).xyz;
+        vertex = sr::math::Mul(model, sr::math::Vec4{data[i].x, data[i].y, data[i].z, 1});
 
-        result.max.x = result.max.x < tmp.x ? tmp.x : result.max.x;
-        result.max.y = result.max.y < tmp.y ? tmp.y : result.max.y;
-        result.max.z = result.max.z < tmp.z ? tmp.z : result.max.z;
+        result.min.x = result.min.x > vertex.x ? vertex.x : result.min.x;
+        result.min.y = result.min.y > vertex.y ? vertex.y : result.min.y;
+        result.min.z = result.min.z > vertex.z ? vertex.z : result.min.z;
 
-        result.min.x = result.min.x > tmp.x ? tmp.x : result.min.x;
-        result.min.y = result.min.y > tmp.y ? tmp.y : result.min.y;
-        result.min.z = result.min.z > tmp.z ? tmp.z : result.min.z;
+        result.max.x = result.max.x < vertex.x ? vertex.x : result.max.x;
+        result.max.y = result.max.y < vertex.y ? vertex.y : result.max.y;
+        result.max.z = result.max.z < vertex.z ? vertex.z : result.max.z;
     }
 
     result.min -= center;

@@ -93,9 +93,20 @@ void ConfigureGL()
 
 void InitializeGlobals()
 {
-    g_quadWallRenderModel = CreateRenderModel(sr::load::CreateBufferDescriptors(g_quadWall),
-                                              sr::load::CreateIndexBufferDescriptor(g_quadWall),
-                                              {});
+    auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(g_quadWall);
+    auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(g_quadWall);
+    sr::load::MaterialSource const emptyMaterial = {};
+
+    RenderModelCreateInfo createInfo;
+    createInfo.color = {};
+    createInfo.debugRenderModel = 0;
+    createInfo.geometry = &g_quadWall;
+    createInfo.indexBufferDescriptor = &indexBufferDescriptor;
+    createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
+    createInfo.model = sr::math::CreateIdentityMatrix();
+    createInfo.material = &emptyMaterial;
+
+    g_quadWallRenderModel = CreateRenderModel(createInfo);
 }
 
 void DeinitializeImGui()
