@@ -17,6 +17,7 @@
 #include <type_traits>
 
 Camera g_camera = CreateCamera();
+Camera g_prevCamera = CreateCamera();
 DirectionalLightSource g_directLight = {
     sr::math::CreateOrthographicProjectionMatrix(-2048.f, 2048.f, -2048.f, 2048.f, -2000.f, 1500.f),
     sr::math::CreateRotationMatrixX(-1.57f)};
@@ -27,10 +28,14 @@ TAABuffer g_taaBuffer = {};
 bool g_captureMouse = false;
 bool g_drawUi = true;
 bool g_isHotRealoadRequired = false;
-uint32_t g_shadowMapsMode = 1;
-uint32_t g_bumpMappingEnabled = 1;
-uint32_t g_toneMappingEnabled = 1;
+uint32_t g_shadowMappingEnabled = 0;
+uint32_t g_bumpMappingEnabled = 0;
+uint32_t g_toneMappingEnabled = 0;
+uint32_t g_taaEnabled = 0;
+uint32_t g_taaJitterEnabled = 0;
 float g_bumpMapScaleFactor = 0.00001f;
+float g_depthBiasScale = 0.1f;
+float g_depthUnitScale = 1.0f;
 uint32_t g_bumpMapAvailable = 0;
 uint32_t g_metallicMapAvailable = 0;
 uint32_t g_roughnessMapAvailable = 0;
@@ -130,7 +135,7 @@ void GLFWKeyCallback(GLFWwindow *window, int key, int scancode, int action, int 
             glfwSetInputMode(window, GLFW_CURSOR, g_captureMouse ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
             break;
         case GLFW_KEY_F1:
-            g_shadowMapsMode = g_shadowMapsMode + 1 == 2 ? 0 : 1;
+            g_shadowMappingEnabled = g_shadowMappingEnabled + 1 == 2 ? 0 : 1;
             break;
         case GLFW_KEY_F2:
             g_bumpMappingEnabled = g_bumpMappingEnabled + 1 == 2 ? 0 : 1;
@@ -213,28 +218,48 @@ void DrawUI(GLFWwindow *window)
     ImGui::Separator();
     ImGui::Spacing();
 
-    ImGui::InputFloat3("Camera Position", g_camera.pos.data, 1);
-    ImGui::InputFloat2("Camera XY Rads", &g_camera.xWorldAngle, 1);
+    ImGui::Text("Camera");
+    {
+        ImGui::InputFloat("Near Plane", &g_camera.near);
+        ImGui::InputFloat("Far Plane", &g_camera.far);
+        ImGui::InputFloat("FOV", &g_camera.fov);
+        ImGui::Text("Aspect: %f", g_camera.aspect);
+        ImGui::InputFloat3("Position", g_camera.pos.data, 1);
+        ImGui::InputFloat2("XY Rads", &g_camera.xWorldAngle, 1);
+    }
 
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
-    ImGui::Text("Features");
+    ImGui::Text("Pipeline");
     {
-        static bool enableShadowMappingCheckBoxValue = static_cast<bool>(g_shadowMapsMode);
-        ImGui::Checkbox("Shadow Mapping", &enableShadowMappingCheckBoxValue);
-        g_shadowMapsMode = static_cast<bool>(enableShadowMappingCheckBoxValue);
+        ImGui::NewLine();
+        ImGui::Text("Depth pre pass");
+        ImGui::InputFloat("Depth Bias", &g_depthBiasScale);
+        ImGui::InputFloat("Depth Unit", &g_depthUnitScale);
 
+        ImGui::NewLine();
+        static bool enableShadowMappingCheckBoxValue = static_cast<bool>(g_shadowMappingEnabled);
+        ImGui::Checkbox("Shadow Mapping", &enableShadowMappingCheckBoxValue);
+        g_shadowMappingEnabled = static_cast<bool>(enableShadowMappingCheckBoxValue);
+
+        ImGui::NewLine();
         static bool enableBumpMappingCheckboxValue = static_cast<bool>(g_bumpMappingEnabled);
         ImGui::Checkbox("Bump Mapping", &enableBumpMappingCheckboxValue);
         g_bumpMappingEnabled = static_cast<bool>(enableBumpMappingCheckboxValue);
-        ImGui::SliderFloat("Bump map scale factor", &g_bumpMapScaleFactor, 0.0001f, 0.01f, "%.5f");
+        ImGui::SliderFloat("Bump map scale", &g_bumpMapScaleFactor, 0.0001f, 0.01f, "%.5f");
 
-        static bool enableTaaCheckboxValue = static_cast<bool>(g_taaBuffer.enableTAA);
+        ImGui::NewLine();
+        ImGui::Text("Temporal Antialiasing");
+        static bool enableTaaCheckboxValue = static_cast<bool>(g_taaEnabled);
         ImGui::Checkbox("TAA", &enableTaaCheckboxValue);
-        g_taaBuffer.enableTAA = static_cast<decltype(g_taaBuffer.enableTAA)>(enableTaaCheckboxValue);
+        g_taaEnabled = static_cast<decltype(g_taaEnabled)>(enableTaaCheckboxValue);
+        static bool enableTaaJitterCheckboxValue = static_cast<bool>(g_taaJitterEnabled);
+        ImGui::Checkbox("Jitter", &enableTaaJitterCheckboxValue);
+        g_taaJitterEnabled = static_cast<decltype(g_taaJitterEnabled)>(enableTaaJitterCheckboxValue);
 
+        ImGui::NewLine();
         static bool enabledToneMappingCheckboxValue = static_cast<bool>(g_toneMappingEnabled);
         ImGui::Checkbox("Tone Mapping", &enabledToneMappingCheckboxValue);
         g_toneMappingEnabled = static_cast<decltype(g_toneMappingEnabled)>(enabledToneMappingCheckboxValue);
@@ -368,7 +393,9 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
             desc.depthPrePass,
             UniformsDescriptor{
                 UniformsDescriptor::PerFrameUI32{
-                    {"uTaaEnabledUint"}, {&g_taaBuffer.enableTAA}, {1}},
+                    {"uTaaEnabledUint", "uTaaJitterEnabledUint"},
+                    {&g_taaEnabled, &g_taaJitterEnabled},
+                    {1, 1}},
                 UniformsDescriptor::PerFrameFloat1{},
                 UniformsDescriptor::PerFrameFloat2{},
                 UniformsDescriptor::PerFrameFloat3{},
@@ -425,12 +452,14 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                     {"uRenderModeUint",
                      "uShadowMappingEnabledUint",
                      "uBumpMappingEnabledUint",
-                     "uTaaEnabledUint"},
+                     "uTaaEnabledUint",
+                     "uTaaJitterEnabledUint"},
                     {reinterpret_cast<uint32_t *>(&g_renderMode),
-                     &g_shadowMapsMode,
+                     &g_shadowMappingEnabled,
                      &g_bumpMappingEnabled,
-                     &g_taaBuffer.enableTAA},
-                    {1, 1, 1, 1}},
+                     &g_taaEnabled,
+                     &g_taaJitterEnabled},
+                    {1, 1, 1, 1, 1}},
                 //floats
                 UniformsDescriptor::PerFrameFloat1{
                     {"uBumpMapScaleFactorFloat"},
@@ -502,8 +531,7 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
         CreateShaderProgramUniformBindings(
             desc.velocity,
             UniformsDescriptor{
-                UniformsDescriptor::PerFrameUI32{
-                    {"uTaaEnabledUint"}, {&g_taaBuffer.enableTAA}, {1}},
+                UniformsDescriptor::PerFrameUI32{},
                 UniformsDescriptor::PerFrameFloat1{},
                 UniformsDescriptor::PerFrameFloat2{},
                 UniformsDescriptor::PerFrameFloat3{},
@@ -513,7 +541,7 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                      "uPrevProjUnjitMat4",
                      "uViewMat4",
                      "uProjUnjitMat4"},
-                    {g_taaBuffer.prevView.data,
+                    {g_prevCamera.view.data,
                      g_taaBuffer.prevProjUnjit.data,
                      g_camera.view.data,
                      g_taaBuffer.projUnjit.data},
@@ -560,10 +588,12 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
             UniformsDescriptor{
                 UniformsDescriptor::PerFrameUI32{
                     {"uFrameCountUint",
-                     "uTaaEnabledUint"},
+                     "uTaaEnabledUint",
+                     "uTaaJitterEnabledUint"},
                     {&g_taaBuffer.count,
-                     &g_taaBuffer.enableTAA},
-                    {1, 1}},
+                     &g_taaEnabled,
+                     &g_taaJitterEnabled},
+                    {1, 1, 1}},
                 UniformsDescriptor::PerFrameFloat1{},
                 UniformsDescriptor::PerFrameFloat2{
                     {"uJitterVec2"}, {g_taaBuffer.jitter.data}, {1}},
@@ -572,13 +602,17 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                 UniformsDescriptor::PerFrameMat4{
                     {"uViewMat",
                      "uProjMat",
+                     "uProjUnjitMat",
                      "uPrevViewMat",
-                     "uPrevProjMat"},
+                     "uPrevProjMat",
+                     "uPrevProjUnjitMat"},
                     {g_camera.view.data,
                      g_camera.proj.data,
-                     g_taaBuffer.prevView.data,
-                     g_taaBuffer.prevProj.data},
-                    {1, 1, 1, 1}},
+                     g_taaBuffer.projUnjit.data,
+                     g_prevCamera.view.data,
+                     g_prevCamera.proj.data,
+                     g_taaBuffer.prevProjUnjit.data},
+                    {1, 1, 1, 1, 1, 1}},
                 UniformsDescriptor::PerModelUI32{},
                 UniformsDescriptor::PerModelFloat1{},
                 UniformsDescriptor::PerModelFloat2{},
@@ -592,7 +626,8 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
         CreateShaderProgramUniformBindings(
             desc.debug,
             UniformsDescriptor{
-                UniformsDescriptor::PerFrameUI32{},
+                UniformsDescriptor::PerFrameUI32{
+                    {"uTaaEnabledUint"}, {&g_taaEnabled}, {1}},
                 UniformsDescriptor::PerFrameFloat1{},
                 UniformsDescriptor::PerFrameFloat2{},
                 UniformsDescriptor::PerFrameFloat3{},
@@ -618,15 +653,30 @@ void UpdateModels(std::vector<RenderModel> &models)
         models.back().model);
 }
 
-void RenderPassDepthPrePass(Pipeline &pipeline, std::vector<RenderModel> const &models)
+void PrePassCommands(Pipeline &pipeline, std::vector<RenderModel> &models)
 {
-    g_camera.view = CreateViewMatrix(g_camera.pos, g_camera.xWorldAngle, g_camera.yWorldAngle);
-    // g_camera.proj = sr::math::CreateOrthographicProjectionMatrix(
-    //     -2048.f, 2048.f, -2048.f, 2048.f, -2000.f, 1500.f);
-    const uint32_t taaSampleIndex = g_taaBuffer.count % 16;
+    { // Save previous frame model matrices
+        g_taaBuffer.prevModels.resize(models.size());
+        for (uint64_t i = 0; i < models.size(); ++i)
+        {
+            g_taaBuffer.prevModels[i] = models[i].model;
+        }
+    }
 
-    // https://github.com/playdeadgames/temporal
-    {
+    UpdateModels(models);
+
+    { //Save previous frame camera materices
+        g_prevCamera = g_camera;
+        g_taaBuffer.prevProjUnjit = g_taaBuffer.projUnjit;
+    }
+
+    { // Update view projection with respect to TAA
+        g_camera.view = CreateViewMatrix(g_camera.pos, g_camera.xWorldAngle, g_camera.yWorldAngle);
+        // g_camera.proj = sr::math::CreateOrthographicProjectionMatrix(
+        //     -2048.f, 2048.f, -2048.f, 2048.f, -2000.f, 1500.f);
+        const uint32_t taaSampleIndex = g_taaBuffer.count % 16;
+
+        // https://github.com/playdeadgames/temporal
         float const oneExtentY = std::tan(0.5f * g_camera.fov);
         float const oneExtentX = oneExtentY * g_camera.aspect;
         float const texelSizeX = oneExtentX / (0.5f * pipeline.debug.width);
@@ -634,28 +684,31 @@ void RenderPassDepthPrePass(Pipeline &pipeline, std::vector<RenderModel> const &
         float const oneJitterX = texelSizeX * g_taaHalton23Sequence16[taaSampleIndex].x;
         float const oneJitterY = texelSizeY * g_taaHalton23Sequence16[taaSampleIndex].y;
 
-        float const cf = g_camera.far;
-        float const cn = g_camera.near;
-        float const xm = oneJitterX - oneExtentX;
-        float const xp = oneJitterX + oneExtentX;
-        float const ym = oneJitterY - oneExtentY;
-        float const yp = oneJitterY + oneExtentY;
-
-        g_taaBuffer.jitter = {oneJitterX, oneJitterY};
         //Note: Below is Inside approach, might be better that mine
+        // float const cf = g_camera.far;
+        // float const cn = g_camera.near;
+        // float const xm = oneJitterX - oneExtentX;
+        // float const xp = oneJitterX + oneExtentX;
+        // float const ym = oneJitterY - oneExtentY;
+        // float const yp = oneJitterY + oneExtentY;
         //g_camera.proj = sr::math::CreatePerspectiveProjectionMatrix(
         //    xm * cn, xp * cn, ym * cn, yp * cn, cn, cf);
+        g_taaBuffer.jitter = {oneJitterX, oneJitterY};
         g_taaBuffer.projUnjit = sr::math::CreatePerspectiveProjectionMatrix(
             g_camera.near, g_camera.far, g_camera.fov, g_camera.aspect);
         g_camera.proj = sr::math::Mul(
             sr::math::CreateTranslationMatrix(oneJitterX, oneJitterY, 0), g_taaBuffer.projUnjit);
     }
+}
 
-    int32_t const width = pipeline.depthPrePass.width;
-    int32_t const height = pipeline.depthPrePass.height;
-    sr::math::Vec2 const sample = g_taaHalton23Sequence16[taaSampleIndex] - 0.5f;
+void RenderPassDepthPrePass(Pipeline &pipeline, std::vector<RenderModel> const &models)
+{
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(g_depthBiasScale, g_depthUnitScale);
 
     ExecuteRenderPass(pipeline.depthPrePass, models.data(), models.size());
+
+    glDisable(GL_POLYGON_OFFSET_FILL);
 }
 
 void RenderPassShadowMap(Pipeline &pipeline, std::vector<RenderModel> const &models)
@@ -671,12 +724,6 @@ void RenderPassLighting(Pipeline &pipeline, std::vector<RenderModel> const &mode
 void RenderPassVelocity(Pipeline &pipeline, std::vector<RenderModel> const &models)
 {
     ExecuteRenderPass(pipeline.velocity, models.data(), models.size());
-
-    g_taaBuffer.prevModels.resize(models.size());
-    for (uint64_t i = 0; i < models.size(); ++i)
-    {
-        g_taaBuffer.prevModels[i] = models[i].model;
-    }
 }
 
 void RenderPassToneMapping(Pipeline &pipeline)
@@ -691,9 +738,6 @@ void RenderPassTAA(Pipeline &pipeline)
     pipeline.taa.subPasses[0].active = !pipeline.taa.subPasses[0].active;
     pipeline.taa.subPasses[1].active = !pipeline.taa.subPasses[0].active;
 
-    g_taaBuffer.prevProj = g_camera.proj;
-    g_taaBuffer.prevProjUnjit = g_taaBuffer.projUnjit;
-    g_taaBuffer.prevView = g_camera.view;
     g_taaBuffer.count++;
 }
 
@@ -738,7 +782,7 @@ void MainLoop(GLFWwindow *window)
             g_isHotRealoadRequired = false;
         }
 
-        UpdateModels(models);
+        PrePassCommands(pipeline, models);
         RenderPassDepthPrePass(pipeline, models);
         RenderPassShadowMap(pipeline, models);
         RenderPassLighting(pipeline, models);

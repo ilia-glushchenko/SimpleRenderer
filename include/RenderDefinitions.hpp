@@ -14,9 +14,9 @@ using namespace gl;
 
 namespace sr::load
 {
-    struct Geometry;
-    struct MaterialSource;
-}
+struct Geometry;
+struct MaterialSource;
+} // namespace sr::load
 
 struct UniformBindingUI32
 {
@@ -239,12 +239,9 @@ struct Pipeline
 struct TAABuffer
 {
     sr::math::Matrix4x4 projUnjit = sr::math::CreateIdentityMatrix();
-    sr::math::Matrix4x4 prevView = sr::math::CreateIdentityMatrix();
-    sr::math::Matrix4x4 prevProj = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 prevProjUnjit = sr::math::CreateIdentityMatrix();
     std::vector<sr::math::Matrix4x4> prevModels;
     sr::math::Vec2 jitter = {};
-    uint32_t enableTAA = 1;
     uint32_t count = 0;
 };
 

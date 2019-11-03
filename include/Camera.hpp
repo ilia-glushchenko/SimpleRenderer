@@ -14,8 +14,8 @@ Camera CreateCamera()
 
     camera.fov = 1.0472f;
     camera.aspect = 1;
-    camera.near = 0.1f;
-    camera.far = 10000.f;
+    camera.near = 10.f;
+    camera.far = 3000.f;
     camera.proj = sr::math::CreatePerspectiveProjectionMatrix(camera.near, camera.far, camera.fov, 1.f);
     camera.view = sr::math::CreateIdentityMatrix();
     camera.pos = {-530.f, 150.f, -35.f};

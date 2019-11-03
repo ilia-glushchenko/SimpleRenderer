@@ -137,7 +137,7 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.attachments[1] = SubPassAttachmentDescriptor{
             GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, pipeline.depthPrePass.subPasses[0].desc.attachments[0].handle};
         desc.depthMask = GL_FALSE;
-        desc.depthFunc = GL_EQUAL;
+        desc.depthFunc = GL_LEQUAL;
         desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
         desc.clearColor = {1, 1, 1, 1};
 
@@ -155,7 +155,7 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.attachments[1] = SubPassAttachmentDescriptor{
             GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, pipeline.depthPrePass.subPasses[0].desc.attachments[0].handle};
         desc.depthMask = GL_FALSE;
-        desc.depthFunc = GL_EQUAL;
+        desc.depthFunc = GL_LEQUAL;
         desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
 
         auto const name = "Velocity";
@@ -433,7 +433,7 @@ void DrawModel(RenderModel const &model)
 
 void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64_t modelCount)
 {
-    glPushGroupMarkerEXT(pass.name.length, pass.name.data);
+    //glPushGroupMarkerEXT(pass.name.length, pass.name.data);
 
     for (uint8_t i = 0; i < pass.subPassCount; ++i)
     {
@@ -472,7 +472,7 @@ void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64
         }
     }
 
-    glPopGroupMarkerEXT();
+    //glPopGroupMarkerEXT();
 }
 
 void ExecuteBackBufferBlitRenderPass(GLuint fbo, GLenum attachment, int32_t width, int32_t height)

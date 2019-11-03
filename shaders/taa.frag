@@ -2,11 +2,14 @@
 
 layout (location = 10) uniform mat4 uViewMat;
 layout (location = 11) uniform mat4 uProjMat;
+layout (location = 14) uniform mat4 uProjUnjitMat;
 layout (location = 12) uniform mat4 uPrevViewMat;
 layout (location = 13) uniform mat4 uPrevProjMat;
-layout (location = 14) uniform uint uFrameCountUint;
-layout (location = 15) uniform vec2 uJitterVec2;
-layout (location = 16) uniform uint uTaaEnabledUint;
+layout (location = 15) uniform mat4 uPrevProjUnjitMat;
+layout (location = 16) uniform uint uFrameCountUint;
+layout (location = 17) uniform vec2 uJitterVec2;
+layout (location = 18) uniform uint uTaaEnabledUint;
+layout (location = 19) uniform uint uTaaJitterEnabledUint;
 
 layout (location = 20, binding = 0) uniform sampler2D uColorTextureSampler2D;
 layout (location = 21, binding = 1) uniform sampler2D uDepthTextureSampler2D;
@@ -20,7 +23,7 @@ layout (location = 2) in vec2 uv;
 layout (location = 0) out vec4 outColor;
 
 #define USE_YCoCg
-#define USE_CLIPPING
+#define USE_AABB_CLIPPING
 #define USE_CLAMPING
 #define USE_VELOCITY_CORRECTED_UV
 
@@ -87,7 +90,9 @@ vec3 YCoCg2RGB(vec3 c)
 vec3 WorldPosFromDepth(float depth, vec2 TexCoord)
 {
     vec4 clipSpacePosition = vec4(TexCoord * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-    vec4 viewSpacePosition = inverse(uProjMat) * clipSpacePosition;
+    vec4 viewSpacePosition = bool(uTaaJitterEnabledUint)
+        ? inverse(uProjMat) * clipSpacePosition
+        : inverse(uProjUnjitMat) * clipSpacePosition;
     viewSpacePosition /= viewSpacePosition.w;
     vec4 worldSpacePosition = inverse(uViewMat) * viewSpacePosition;
 
@@ -98,7 +103,9 @@ vec3 ReverseReprojectFrag(vec2 uv, vec2 jitter)
 {
     vec3 fragPosWorld = WorldPosFromDepth(texture(uDepthTextureSampler2D, uv - jitter).r, uv);
 
-    vec4 fragPosPrevProj = uPrevProjMat * uPrevViewMat * vec4(fragPosWorld, 1);
+    vec4 fragPosPrevProj = bool(uTaaJitterEnabledUint)
+        ? uPrevProjMat * uPrevViewMat * vec4(fragPosWorld, 1)
+        : uPrevProjUnjitMat * uPrevViewMat * vec4(fragPosWorld, 1);
 
     return fragPosPrevProj.xyz / fragPosPrevProj.w;
 }
@@ -315,7 +322,7 @@ vec4 TemporalReprojection()
     vec4 reprojectedColor = vec4(0);
 
     const float feedback = 0.05f;
-    vec2 jitter = -uJitterVec2;
+    vec2 jitter = vec2(0);//bool(uTaaJitterEnabledUint) ? -uJitterVec2 : vec2(0);
     vec3 fragPosPrevProj = ReverseReprojectFrag(uv, jitter);
 
     if (fragPosPrevProj.x > 1 || fragPosPrevProj.x < -1 || fragPosPrevProj.y > 1 || fragPosPrevProj.y < -1)
@@ -348,9 +355,9 @@ vec4 TemporalReprojection()
             average.yz = chroma_center;
 #endif
 
-#ifdef USE_CLIPPING
+#ifdef USE_AABB_CLIPPING
             history = ClipAABB(minima, maxima, clamp(average, minima, maxima), history);
-#elif  USE_CLAMPING
+#elif defined(USE_CLAMPING)
             history = clamp(texture(uHistoryTextureSampler2D, historyUV).rgb,
                 SampleMinima(uv - jitter), SampleMaxima(uv - jitter));
 #endif

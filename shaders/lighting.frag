@@ -4,7 +4,7 @@ layout (location = 10) uniform vec3 uColor;
 layout (location = 11) uniform mat4 uModelMat;
 
 layout (location = 20) uniform uint uRenderModeUint;
-layout (location = 21) uniform uint uTaaEnabledUint;
+layout (location = 21) uniform uint uTaaJitterEnabledUint;
 layout (location = 22) uniform uint uShadowMappingEnabledUint;
 layout (location = 23) uniform uint uBumpMapAvailableUint;
 layout (location = 24) uniform uint uMetallicMapAvailableUint;

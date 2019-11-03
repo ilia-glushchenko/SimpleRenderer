@@ -1,5 +1,7 @@
 #version 460
 
+layout (location = 10) uniform uint uTaaEnabledUint;
+
 layout (location = 20, binding = 0) uniform sampler2D uLightingColorTextureSampler2D;
 layout (location = 21, binding = 1) uniform sampler2D uLightingDepthTextureSampler2D;
 layout (location = 24, binding = 2) uniform sampler2D uVelocityTextureSampler2D;
@@ -39,6 +41,7 @@ bool IsNan(vec4 color)
 // #define NAN
 // #define TONE_MAPPING
 // #define COLOR_DIST
+// #define VELOCITY
 
 void main()
 {
@@ -46,7 +49,7 @@ void main()
     vec3 toneMappedColor = texture(uToneMappingTextureSampler2D, uv).rgb;
     vec3 taaColor = texture(uTaaDrawTextureSampler2D, uv).rgb;
 
-    outColor = vec4(taaColor, 1);
+    outColor = bool(uTaaEnabledUint) ? vec4(taaColor, 1) : vec4(lightingColor, 1);
 
 #ifdef NAN
     vec4 color = texture(uLightingColorTextureSampler2D, uv);
@@ -61,6 +64,10 @@ void main()
 #ifdef COLOR_DIST
     outColor = distance(toneMappedColor, taaColor) > 0.1f
        ? vec4(1, 0, 0, 1) : vec4(0, 1, 0.5, 1);
+#endif
+
+#ifdef VELOCITY
+    outColor = vec4(abs(texture(uVelocityTextureSampler2D, uv).xy) * 1000, 0, 1);
 #endif
 
     //outColor = vec4((toneMappedColor - taaColor) * 1000f, 1);
