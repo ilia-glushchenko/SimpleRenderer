@@ -33,7 +33,7 @@ layout (location = 6) in vec2 inUv;
 
 layout (location = 0) out vec4 outColor;
 
-#define ENABLE_POINT_LIGHT
+//#define ENABLE_POINT_LIGHT
 #define ENABLE_DIRECT_LIGHT
 
 const float MipBias = -1.0;
@@ -241,7 +241,7 @@ vec3 CalculateRadiance(float shadowMapDepth, vec2 uv, vec3 n, vec3 shadowPosMVP,
 
 #ifdef ENABLE_DIRECT_LIGHT
     vec3 fSpecDL = vec3(0);
-    if (bool(uShadowMappingEnabledUint) && shadowPosMVP.z < shadowMapDepth)
+    if (bool(uShadowMappingEnabledUint) && shadowPosMVP.z  - 1.1f < shadowMapDepth)
     {
         fSpecDL = PI * (uBrdfUint == 0
             ? CookTorance(view, normal, directionalLightDir, ro)
@@ -270,7 +270,7 @@ void main()
     if (uRenderModeUint == 0) // Full
     {
         if (bool(uDebugRenderModeAvailableUint)){
-            outColor = vec4(uColor, 1);
+            outColor = vec4(uColor, 0.3f);
         }
         else{
             vec3 radiance = CalculateRadiance(shadowMapDepth, uv, n, shadowPosMVP, TBN);
@@ -310,7 +310,7 @@ void main()
     }
     else if (uRenderModeUint == 5) // ShadowMap
     {
-        outColor = vec4(vec3(shadowPosMVP.z < shadowMapDepth - 0.35 ? 1 : 0), 1);
+        outColor = vec4(vec3(shadowPosMVP.z < shadowMapDepth ? 1 : 0), 1);
     }
     else if (uRenderModeUint == 6) // Metallic
     {

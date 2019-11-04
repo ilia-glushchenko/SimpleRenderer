@@ -321,7 +321,7 @@ vec4 TemporalReprojection()
 {
     vec4 reprojectedColor = vec4(0);
 
-    const float feedback = 0.05f;
+    float feedback = 0.05f;
     vec2 jitter = vec2(0);//bool(uTaaJitterEnabledUint) ? -uJitterVec2 : vec2(0);
     vec3 fragPosPrevProj = ReverseReprojectFrag(uv, jitter);
 
@@ -353,6 +353,8 @@ vec4 TemporalReprojection()
             minima.yz = chroma_center - chroma_extent;
             maxima.yz = chroma_center + chroma_extent;
             average.yz = chroma_center;
+
+            feedback = 1 / (1 + color.r);
 #endif
 
 #ifdef USE_AABB_CLIPPING

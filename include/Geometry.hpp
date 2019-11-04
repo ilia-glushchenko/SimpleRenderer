@@ -68,21 +68,21 @@ inline AABB CalculateAABB(
     assert(!IsNullMatrix(model));
 
     AABB result = {
-        {-FLT_MAX, -FLT_MAX, -FLT_MAX},
-        {FLT_MAX, FLT_MAX, FLT_MAX}};
+        {FLT_MAX, FLT_MAX, FLT_MAX},
+        {-FLT_MAX, -FLT_MAX, -FLT_MAX}};
 
     sr::math::Vec4 vertex;
     for (uint64_t i = 0; i < length; ++i)
     {
         vertex = sr::math::Mul(model, sr::math::Vec4{data[i].x, data[i].y, data[i].z, 1});
 
-        result.min.x = result.min.x > vertex.x ? vertex.x : result.min.x;
-        result.min.y = result.min.y > vertex.y ? vertex.y : result.min.y;
-        result.min.z = result.min.z > vertex.z ? vertex.z : result.min.z;
+        result.min.x = vertex.x < result.min.x ? vertex.x : result.min.x;
+        result.min.y = vertex.y < result.min.y ? vertex.y : result.min.y;
+        result.min.z = vertex.z < result.min.z ? vertex.z : result.min.z;
 
-        result.max.x = result.max.x < vertex.x ? vertex.x : result.max.x;
-        result.max.y = result.max.y < vertex.y ? vertex.y : result.max.y;
-        result.max.z = result.max.z < vertex.z ? vertex.z : result.max.z;
+        result.max.x = vertex.x > result.max.x ? vertex.x : result.max.x;
+        result.max.y = vertex.y > result.max.y ? vertex.y : result.max.y;
+        result.max.z = vertex.z > result.max.z ? vertex.z : result.max.z;
     }
 
     result.min -= center;

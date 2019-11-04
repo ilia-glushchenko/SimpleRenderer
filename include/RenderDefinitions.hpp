@@ -289,8 +289,19 @@ struct RenderModelCreateInfo
     GLuint debugRenderModel;
 };
 
+struct OrthographicFrustum
+{
+    float left;
+    float right;
+    float bottom;
+    float top;
+    float near;
+    float far;
+};
+
 struct DirectionalLightSource
 {
-    sr::math::Matrix4x4 projection;
-    sr::math::Matrix4x4 view;
+    OrthographicFrustum frustum = {-2048.f, 2048.f, -2048.f, 2048.f, -2000.f, 1500.f};
+    sr::math::Matrix4x4 projection = sr::math::CreateIdentityMatrix();
+    sr::math::Matrix4x4 view = sr::math::CreateIdentityMatrix();
 };

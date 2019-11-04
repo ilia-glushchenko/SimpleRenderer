@@ -433,7 +433,7 @@ void DrawModel(RenderModel const &model)
 
 void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64_t modelCount)
 {
-    //glPushGroupMarkerEXT(pass.name.length, pass.name.data);
+    glPushGroupMarkerEXT(pass.name.length, pass.name.data);
 
     for (uint8_t i = 0; i < pass.subPassCount; ++i)
     {
@@ -472,11 +472,13 @@ void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64
         }
     }
 
-    //glPopGroupMarkerEXT();
+    glPopGroupMarkerEXT();
 }
 
 void ExecuteBackBufferBlitRenderPass(GLuint fbo, GLenum attachment, int32_t width, int32_t height)
 {
+    glPushGroupMarkerEXT(sizeof("Blit framebuffer"), "Blit framebuffer");
+
     glBindFramebuffer(GL_READ_FRAMEBUFFER, fbo);
     {
         glReadBuffer(attachment);
@@ -492,4 +494,6 @@ void ExecuteBackBufferBlitRenderPass(GLuint fbo, GLenum attachment, int32_t widt
             GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT, GL_NEAREST);
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    glPopGroupMarkerEXT();
 }

@@ -18,9 +18,7 @@
 
 Camera g_camera = CreateCamera();
 Camera g_prevCamera = CreateCamera();
-DirectionalLightSource g_directLight = {
-    sr::math::CreateOrthographicProjectionMatrix(-2048.f, 2048.f, -2048.f, 2048.f, -2000.f, 1500.f),
-    sr::math::CreateRotationMatrixX(-1.57f)};
+DirectionalLightSource g_directLight;
 constexpr uint32_t g_defaultWidth = 800;
 constexpr uint32_t g_defaultHeight = 800;
 TAABuffer g_taaBuffer = {};
@@ -28,6 +26,7 @@ TAABuffer g_taaBuffer = {};
 bool g_captureMouse = false;
 bool g_drawUi = true;
 bool g_isHotRealoadRequired = false;
+float g_shadowMapRotationX = -1.57f;
 uint32_t g_shadowMappingEnabled = 0;
 uint32_t g_bumpMappingEnabled = 0;
 uint32_t g_toneMappingEnabled = 0;
@@ -207,6 +206,8 @@ void SetupGLFWCallbacks(GLFWwindow *window)
 
 void DrawUI(GLFWwindow *window)
 {
+    glPushGroupMarkerEXT(2, "UI");
+
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -243,6 +244,7 @@ void DrawUI(GLFWwindow *window)
         static bool enableShadowMappingCheckBoxValue = static_cast<bool>(g_shadowMappingEnabled);
         ImGui::Checkbox("Shadow Mapping", &enableShadowMappingCheckBoxValue);
         g_shadowMappingEnabled = static_cast<bool>(enableShadowMappingCheckBoxValue);
+        ImGui::SliderFloat("Rotation X", &g_shadowMapRotationX, -3.14f, 3.14f, "%.5f");
 
         ImGui::NewLine();
         static bool enableBumpMappingCheckboxValue = static_cast<bool>(g_bumpMappingEnabled);
@@ -275,6 +277,8 @@ void DrawUI(GLFWwindow *window)
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+    glPopGroupMarkerEXT();
 }
 
 std::vector<RenderModel> LoadModels(ShaderProgram const &program)
@@ -303,10 +307,33 @@ std::vector<RenderModel> LoadModels(ShaderProgram const &program)
             program.handle, models[i], g_shaderAttributesPositionNormalUV);
     }
 
+    size_t const size = models.size();
+    sr::load::LoadOBJ("data\\models\\box", "box.obj", geometries, materials);
+
+    for (uint32_t i = 0; i < size; ++i)
+    {
+        auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(geometries.back());
+        auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(geometries.back());
+        sr::load::MaterialSource const emptyMaterial = {};
+
+        RenderModelCreateInfo createInfo;
+        createInfo.color = sr::math::Vec3{1.f, 0, 0};
+        createInfo.debugRenderModel = 1;
+        createInfo.geometry = &geometries.back();
+        createInfo.indexBufferDescriptor = &indexBufferDescriptor;
+        createInfo.material = &emptyMaterial;
+        createInfo.model = sr::math::Mul(
+            sr::math::CreateTranslationMatrix(models[i].center),
+            sr::math::CreateScaleMatrix(10));
+        createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
+
+        models.push_back(CreateRenderModel(createInfo));
+        LinkRenderModelToShaderProgram(
+            program.handle, models.back(), g_shaderAttributesPositionNormalUV);
+    }
+
     for (uint32_t i = 0; i < g_pointLightCount; ++i)
     {
-        sr::load::LoadOBJ("data\\models\\box", "box.obj", geometries, materials);
-
         auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(geometries.back());
         auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(geometries.back());
         sr::load::MaterialSource const emptyMaterial = {};
@@ -655,6 +682,45 @@ void UpdateModels(std::vector<RenderModel> &models)
 
 void PrePassCommands(Pipeline &pipeline, std::vector<RenderModel> &models)
 {
+    {
+        g_directLight.view = sr::math::CreateRotationMatrixX(g_shadowMapRotationX);
+        //g_directLight.view = sr::math::Mul(
+        //    sr::math::CreateTranslationMatrix({0, 10000, 0}),
+        //    sr::math::CreateRotationMatrixX(g_shadowMapRotationX));
+
+        float far = FLT_MAX;
+        float near = -FLT_MAX;
+
+        for (auto const &model : models)
+        {
+            sr::math::Vec3 const min = model.aabb.min + model.center;
+            sr::math::Vec3 const max = model.aabb.max + model.center;
+
+            auto const aabb = sr::geo::AABB{
+                sr::math::Mul(g_directLight.view, sr::math::Vec4{min.x, min.y, min.z, 1}).xyz,
+                sr::math::Mul(g_directLight.view, sr::math::Vec4{max.x, max.y, max.z, 1}).xyz,
+            };
+            auto const center = sr::math::Mul(g_directLight.view, sr::math::Vec4{model.center.x, model.center.y, model.center.z, 1});
+
+            far = aabb.max.z < far ? aabb.max.z : far;
+            far = aabb.min.z < far ? aabb.min.z : far;
+            near = aabb.max.z > near ? aabb.max.z : near;
+            near = aabb.min.z > near ? aabb.min.z : near;
+        }
+
+        assert(far != near);
+        g_directLight.frustum.far = near;
+        g_directLight.frustum.near = far;
+
+        g_directLight.projection = sr::math::CreateOrthographicProjectionMatrix(
+            g_directLight.frustum.left,
+            g_directLight.frustum.right,
+            g_directLight.frustum.bottom,
+            g_directLight.frustum.top,
+            g_directLight.frustum.near,
+            g_directLight.frustum.far);
+    }
+
     { // Save previous frame model matrices
         g_taaBuffer.prevModels.resize(models.size());
         for (uint64_t i = 0; i < models.size(); ++i)
@@ -783,6 +849,7 @@ void MainLoop(GLFWwindow *window)
         }
 
         PrePassCommands(pipeline, models);
+
         RenderPassDepthPrePass(pipeline, models);
         RenderPassShadowMap(pipeline, models);
         RenderPassLighting(pipeline, models);
