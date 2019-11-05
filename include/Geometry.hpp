@@ -6,8 +6,8 @@
 #pragma once
 
 #include <Math.hpp>
-#include <limits>
 #include <cassert>
+#include <limits>
 
 namespace sr::geo
 {
@@ -74,7 +74,7 @@ inline AABB CalculateAABB(
     sr::math::Vec4 vertex;
     for (uint64_t i = 0; i < length; ++i)
     {
-        vertex = sr::math::Mul(model, sr::math::Vec4{data[i].x, data[i].y, data[i].z, 1});
+        vertex = model * sr::math::Vec4{data[i].x, data[i].y, data[i].z, 1};
 
         result.min.x = vertex.x < result.min.x ? vertex.x : result.min.x;
         result.min.y = vertex.y < result.min.y ? vertex.y : result.min.y;

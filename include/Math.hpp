@@ -28,27 +28,27 @@ struct Vec2
         float data[2];
     };
 
-    constexpr Vec2 operator-() const
+    inline constexpr Vec2 operator-() const noexcept
     {
         return {-x, -y};
     }
 
-    constexpr Vec2 operator-(float s) const
+    inline constexpr Vec2 operator-(float s) const noexcept
     {
         return {x - s, y - s};
     }
 
-    constexpr Vec2 operator*(float s) const
+    inline constexpr Vec2 operator*(float s) const noexcept
     {
         return {x * s, y * s};
     }
 
-    constexpr Vec2 operator/(float s) const
+    inline constexpr Vec2 operator/(float s) const noexcept
     {
         return {x / s, y / s};
     }
 
-    Vec2 &operator*=(float s)
+    inline constexpr Vec2 &operator*=(float s) noexcept
     {
         return *this = *this * s;
     }
@@ -68,17 +68,17 @@ struct Vec3
         float data[3];
     };
 
-    Vec3 &operator-=(Vec3 const &other)
+    inline constexpr Vec3 &operator-=(Vec3 const &other) noexcept
     {
         return *this = *this - other;
     }
 
-    Vec3 &operator+=(Vec3 const &other)
+    inline constexpr Vec3 &operator+=(Vec3 const &other) noexcept
     {
         return *this = *this + other;
     }
 
-    constexpr Vec3 operator-(Vec3 other) const
+    inline constexpr Vec3 operator-(Vec3 other) const noexcept
     {
         other.x = x - other.x;
         other.y = y - other.y;
@@ -87,7 +87,7 @@ struct Vec3
         return other;
     }
 
-    constexpr Vec3 operator+(Vec3 other) const
+    inline constexpr Vec3 operator+(Vec3 other) const noexcept
     {
         other.x += x;
         other.y += y;
@@ -96,27 +96,27 @@ struct Vec3
         return other;
     }
 
-    constexpr Vec3 operator-() const
+    inline constexpr Vec3 operator-() const noexcept
     {
         return {-x, -y, -z};
     }
 
-    constexpr Vec3 operator*(float s) const
+    inline constexpr Vec3 operator*(float s) const noexcept
     {
         return {x * s, y * s, z * s};
     }
 
-    constexpr Vec3 operator/(float s) const
+    inline constexpr Vec3 operator/(float s) const noexcept
     {
         return {x / s, y / s, z / s};
     }
 
-    constexpr bool operator==(Vec3 const &other) const
+    inline constexpr bool operator==(Vec3 const &other) const noexcept
     {
         return x == other.x && y == other.y && z == other.z;
     }
 
-    constexpr bool operator!=(Vec3 const &other) const
+    inline constexpr bool operator!=(Vec3 const &other) const noexcept
     {
         return !(*this == other);
     }
@@ -138,17 +138,17 @@ struct Vec4
         float data[4];
     };
 
-    Vec4 &operator*=(float s)
+    inline constexpr Vec4 &operator*=(float s) noexcept
     {
         return *this = *this * s;
     }
 
-    constexpr Vec4 operator-() const
+    inline constexpr Vec4 operator-() const noexcept
     {
         return {-x, -y, -z, -w};
     }
 
-    constexpr Vec4 operator-(Vec4 other) const
+    inline constexpr Vec4 operator-(Vec4 other) const noexcept
     {
         other.x = x - other.x;
         other.y = y - other.y;
@@ -158,7 +158,7 @@ struct Vec4
         return other;
     }
 
-    constexpr Vec4 operator+(Vec4 other) const
+    inline constexpr Vec4 operator+(Vec4 other) const noexcept
     {
         other.x = x + other.x;
         other.y = y + other.y;
@@ -168,26 +168,31 @@ struct Vec4
         return other;
     }
 
-    constexpr Vec4 operator*(float s) const
+    inline constexpr Vec4 operator*(float s) const noexcept
     {
         return {x * s, y * s, z * s, w * s};
     }
 
-    constexpr Vec4 operator/(float s) const
+    inline constexpr Vec4 operator/(float s) const noexcept
     {
         return {x / s, y / s, z / s, w / s};
     }
 
-    constexpr bool operator==(Vec4 const &other) const
+    inline constexpr bool operator==(Vec4 const &other) const noexcept
     {
         return x == other.x && y == other.y && z == other.z && w == other.w;
     }
 
-    constexpr bool operator!=(Vec4 const &other) const
+    inline constexpr bool operator!=(Vec4 const &other) const noexcept
     {
         return !(*this == other);
     }
 };
+
+struct Matrix4x4;
+inline constexpr Matrix4x4 Mul(Matrix4x4 mat, float s) noexcept;
+inline constexpr Vec4 Mul(Matrix4x4 mat, Vec4 vec) noexcept;
+inline constexpr Matrix4x4 Mul(Matrix4x4 mat, Matrix4x4 vec) noexcept;
 
 struct Matrix4x4
 {
@@ -206,19 +211,34 @@ struct Matrix4x4
         float data[16];
         float rows[4][4];
     };
+
+    inline constexpr Matrix4x4 operator*(float s) const noexcept
+    {
+        return Mul(*this, s);
+    }
+
+    inline constexpr Vec4 operator*(Vec4 v) const noexcept
+    {
+        return Mul(*this, v);
+    }
+
+    inline constexpr Matrix4x4 operator*(Matrix4x4 const &other) const noexcept
+    {
+        return Mul(*this, other);
+    }
 };
 
-constexpr float Dot(Vec3 a, Vec3 b)
+inline constexpr float Dot(Vec3 a, Vec3 b) noexcept
 {
     return a.x * b.x + a.y * b.y + a.z * b.z;
 }
 
-constexpr float Dot(Vec4 a, Vec4 b)
+inline constexpr float Dot(Vec4 a, Vec4 b) noexcept
 {
     return a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
 }
 
-constexpr Matrix4x4 Mul(Matrix4x4 mat, float s)
+inline constexpr Matrix4x4 Mul(Matrix4x4 mat, float s) noexcept
 {
     return {
         mat._1 * s,
@@ -227,7 +247,7 @@ constexpr Matrix4x4 Mul(Matrix4x4 mat, float s)
         mat._4 * s};
 }
 
-constexpr Vec4 Mul(Matrix4x4 mat, Vec4 vec)
+inline constexpr Vec4 Mul(Matrix4x4 mat, Vec4 vec) noexcept
 {
     Vec4 result = {};
 
@@ -239,7 +259,7 @@ constexpr Vec4 Mul(Matrix4x4 mat, Vec4 vec)
     return result;
 }
 
-constexpr Matrix4x4 Mul(Matrix4x4 a, Matrix4x4 b)
+inline constexpr Matrix4x4 Mul(Matrix4x4 a, Matrix4x4 b) noexcept
 {
     Matrix4x4 result = {};
 
@@ -257,7 +277,7 @@ constexpr Matrix4x4 Mul(Matrix4x4 a, Matrix4x4 b)
     return result;
 }
 
-constexpr Matrix4x4 Transpose(Matrix4x4 m)
+inline constexpr Matrix4x4 Transpose(Matrix4x4 m) noexcept
 {
     return {
         m._11, m._21, m._31, m._41,
@@ -266,7 +286,7 @@ constexpr Matrix4x4 Transpose(Matrix4x4 m)
         m._14, m._24, m._34, m._44};
 }
 
-constexpr Matrix4x4 CreateIdentityMatrix()
+inline constexpr Matrix4x4 CreateIdentityMatrix() noexcept
 {
     return {
         1, 0, 0, 0,
@@ -275,7 +295,7 @@ constexpr Matrix4x4 CreateIdentityMatrix()
         0, 0, 0, 1};
 }
 
-constexpr Matrix4x4 CreateOrthographicProjectionMatrix(float left, float right, float bottom, float top, float near, float far)
+inline constexpr Matrix4x4 CreateOrthographicProjectionMatrix(float left, float right, float bottom, float top, float near, float far) noexcept
 {
     Matrix4x4 mat = {};
 
@@ -293,7 +313,7 @@ constexpr Matrix4x4 CreateOrthographicProjectionMatrix(float left, float right, 
     return mat;
 }
 
-Matrix4x4 CreatePerspectiveProjectionMatrix(float near, float far, float fov, float aspect)
+inline Matrix4x4 CreatePerspectiveProjectionMatrix(float near, float far, float fov, float aspect) noexcept
 {
     Matrix4x4 mat = {};
 
@@ -311,7 +331,8 @@ Matrix4x4 CreatePerspectiveProjectionMatrix(float near, float far, float fov, fl
     return mat;
 }
 
-Matrix4x4 CreatePerspectiveProjectionMatrixSheared(float near, float far, float fov, float aspect, float xShear, float yShear)
+inline Matrix4x4 CreatePerspectiveProjectionMatrixSheared(
+    float near, float far, float fov, float aspect, float xShear, float yShear) noexcept
 {
     Matrix4x4 mat = CreatePerspectiveProjectionMatrix(near, far, fov, aspect);
 
@@ -330,7 +351,8 @@ Matrix4x4 CreatePerspectiveProjectionMatrixSheared(float near, float far, float 
     return mat;
 }
 
-constexpr Matrix4x4 CreatePerspectiveProjectionMatrix(float left, float right, float bottom, float top, float near, float far)
+inline constexpr Matrix4x4 CreatePerspectiveProjectionMatrix(
+    float left, float right, float bottom, float top, float near, float far) noexcept
 {
     Matrix4x4 mat = {};
 
@@ -348,7 +370,8 @@ constexpr Matrix4x4 CreatePerspectiveProjectionMatrix(float left, float right, f
     return mat;
 }
 
-constexpr Matrix4x4 CreateChangeOfBasisMatrix(math::Vec3 dir, math::Vec3 up, math::Vec3 right, math::Vec3 pos)
+inline constexpr Matrix4x4 CreateChangeOfBasisMatrix(
+    math::Vec3 dir, math::Vec3 up, math::Vec3 right, math::Vec3 pos) noexcept
 {
     return {
         right.x, right.y, right.z, math::Dot(-right, pos),
@@ -357,7 +380,7 @@ constexpr Matrix4x4 CreateChangeOfBasisMatrix(math::Vec3 dir, math::Vec3 up, mat
         0, 0, 0, 1};
 }
 
-constexpr Matrix4x4 CreateScaleMatrix(float x, float y, float z)
+inline constexpr Matrix4x4 CreateScaleMatrix(float x, float y, float z) noexcept
 {
     return {
         x, 0, 0, 0,
@@ -366,12 +389,17 @@ constexpr Matrix4x4 CreateScaleMatrix(float x, float y, float z)
         0, 0, 0, 1};
 }
 
-constexpr Matrix4x4 CreateScaleMatrix(float s)
+inline constexpr Matrix4x4 CreateScaleMatrix(float s) noexcept
 {
     return CreateScaleMatrix(s, s, s);
 }
 
-Matrix4x4 CreateRotationMatrixX(float a)
+inline constexpr Matrix4x4 CreateScaleMatrix(Vec3 v) noexcept
+{
+    return CreateScaleMatrix(v.x, v.y, v.z);
+}
+
+inline Matrix4x4 CreateRotationMatrixX(float a) noexcept
 {
     auto const c = std::cos(a);
     auto const s = std::sin(a);
@@ -383,7 +411,7 @@ Matrix4x4 CreateRotationMatrixX(float a)
         0, 0, 0, 1};
 }
 
-Matrix4x4 CreateRotationMatrixY(float a)
+inline Matrix4x4 CreateRotationMatrixY(float a) noexcept
 {
     auto const c = std::cos(a);
     auto const s = std::sin(a);
@@ -395,7 +423,7 @@ Matrix4x4 CreateRotationMatrixY(float a)
         0, 0, 0, 1};
 }
 
-Matrix4x4 CreateRotationMatrixZ(float a)
+inline Matrix4x4 CreateRotationMatrixZ(float a) noexcept
 {
     auto const c = std::cos(a);
     auto const s = std::sin(a);
@@ -407,7 +435,7 @@ Matrix4x4 CreateRotationMatrixZ(float a)
         0, 0, 0, 1};
 }
 
-constexpr Matrix4x4 CreateTranslationMatrix(float x, float y, float z)
+inline constexpr Matrix4x4 CreateTranslationMatrix(float x, float y, float z) noexcept
 {
     return {
         1, 0, 0, x,
@@ -416,17 +444,17 @@ constexpr Matrix4x4 CreateTranslationMatrix(float x, float y, float z)
         0, 0, 0, 1};
 }
 
-constexpr Matrix4x4 CreateTranslationMatrix(Vec3 vec)
+inline constexpr Matrix4x4 CreateTranslationMatrix(Vec3 vec) noexcept
 {
     return CreateTranslationMatrix(vec.x, vec.y, vec.z);
 }
 
-float CreateUniformRandomFloat(float min, float max)
+inline float CreateUniformRandomFloat(float min, float max) noexcept
 {
     return (std::rand() % static_cast<int32_t>(max - min)) - min;
 }
 
-Vec3 CreateUniformRandomVec3(float min, float max)
+inline Vec3 CreateUniformRandomVec3(float min, float max) noexcept
 {
     return {
         CreateUniformRandomFloat(min, max),
@@ -435,9 +463,12 @@ Vec3 CreateUniformRandomVec3(float min, float max)
     };
 }
 
-constexpr bool IsNullMatrix(Matrix4x4 const &m)
+inline constexpr bool IsNullMatrix(Matrix4x4 const &m) noexcept
 {
-    return m._11 == 0 && m._21 == 0 && m._31 == 0 && m._41 == 0 && m._12 == 0 && m._22 == 0 && m._32 == 0 && m._42 == 0 && m._13 == 0 && m._23 == 0 && m._33 == 0 && m._43 == 0 && m._14 == 0 && m._24 == 0 && m._34 == 0 && m._44 == 0;
+    return m._11 == 0 && m._21 == 0 && m._31 == 0 && m._41 == 0 &&
+           m._12 == 0 && m._22 == 0 && m._32 == 0 && m._42 == 0 &&
+           m._13 == 0 && m._23 == 0 && m._33 == 0 && m._43 == 0 &&
+           m._14 == 0 && m._24 == 0 && m._34 == 0 && m._44 == 0;
 }
 
 } // namespace sr::math

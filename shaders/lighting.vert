@@ -7,7 +7,7 @@ layout (location = 13) uniform mat4 uProjMat;
 layout (location = 14) uniform mat4 uDirLightViewMat;
 layout (location = 15) uniform mat4 uDirLightProjMat;
 layout (location = 16) uniform mat4 uProjUnjitMat;
-layout (location = 21) uniform uint uTaaJitterEnabledUint;
+layout (location = 23) uniform uint uTaaJitterEnabledUint;
 
 layout (location = 0) in vec3 aPosition;
 layout (location = 1) in vec3 aNormal;
@@ -25,11 +25,12 @@ void main()
 {
     positionWorld = uModelMat * vec4(aPosition, 1);
     positionView = uViewMat * uModelMat * vec4(aPosition, 1);
+
     normalWorld = (uModelMat * vec4(aNormal, 0)).xyz;
     normalView = (uViewMat * uModelMat * vec4(aNormal, 0)).xyz;
 
     directionalLightDir = (uViewMat * uDirLightViewMat * vec4(0, 0, -1, 0)).xyz;
-    positionShadowMapMvp = uDirLightProjMat * uDirLightViewMat * uModelMat * vec4(aPosition, 1.0);
+    positionShadowMapMvp = uDirLightProjMat * uDirLightViewMat * positionWorld;
 
     uv = aUV;
 

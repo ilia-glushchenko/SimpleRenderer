@@ -43,6 +43,7 @@ set(SIMPLE_REDNERER_HEADERS
     include/RenderConfiguration.hpp
     include/RenderDefinitions.hpp
     include/RenderPass.hpp
+    include/RenderPipeline.hpp
     include/RenderModel.hpp
     include/ShaderProgram.hpp
     include/Camera.hpp

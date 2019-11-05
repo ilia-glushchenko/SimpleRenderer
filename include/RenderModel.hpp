@@ -79,12 +79,16 @@ RenderModel CreateRenderModel(RenderModelCreateInfo const &createInfo)
         renderModel.roughnessTexture = CreateMipMappedTexture(*createInfo.material->roughness);
     }
 
-    renderModel.model = createInfo.model;
+    renderModel.model = sr::math::CreateTranslationMatrix(createInfo.position) *
+                        sr::math::CreateRotationMatrixZ(createInfo.orientation.z) *
+                        sr::math::CreateRotationMatrixY(createInfo.orientation.y) *
+                        sr::math::CreateRotationMatrixX(createInfo.orientation.x) *
+                        sr::math::CreateScaleMatrix(createInfo.scale);
     renderModel.color = createInfo.color;
     renderModel.center = sr::geo::CalculateCenterOfMass(
         createInfo.geometry->vertices.data(), createInfo.geometry->indices.data(), createInfo.geometry->indices.size());
     renderModel.aabb = sr::geo::CalculateAABB(
-        createInfo.geometry->vertices.data(), createInfo.geometry->vertices.size(), renderModel.center, renderModel.model);
+        createInfo.geometry->vertices.data(), createInfo.geometry->vertices.size(), createInfo.position, renderModel.model);
 
     renderModel.debugRenderModel = createInfo.debugRenderModel;
     renderModel.brdf = createInfo.material->brdf == "marbel" ? 0 : 1;

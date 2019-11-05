@@ -87,6 +87,9 @@ void ConfigureGL()
 
     glEnable(GL_DEPTH_TEST);
 
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_BLEND);
+
     glFrontFace(GL_CW);
     glCullFace(GL_BACK);
 }
@@ -103,7 +106,6 @@ void InitializeGlobals()
     createInfo.geometry = &g_quadWall;
     createInfo.indexBufferDescriptor = &indexBufferDescriptor;
     createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
-    createInfo.model = sr::math::CreateIdentityMatrix();
     createInfo.material = &emptyMaterial;
 
     g_quadWallRenderModel = CreateRenderModel(createInfo);

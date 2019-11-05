@@ -351,10 +351,11 @@ healthchecksdb
 # Backup folder for Package Reference Convert tool in Visual Studio 2017
 MigrationBackup/
 
-build/
-out/
-data/
-__pycache__/
-.vscode/
-.vs/
+/build/
+/out/
+/data/
+/__pycache__/
+/.vscode/
+/.vs/
 CMakeSettings.json
+/data

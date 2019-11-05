@@ -5,8 +5,8 @@
  */
 #pragma once
 
-#include "Math.hpp"
 #include "Geometry.hpp"
+#include "Math.hpp"
 
 #include <glbinding/Binding.h>
 #include <glbinding/gl46ext/gl.h>
@@ -104,24 +104,31 @@ struct UniformsDescriptor
     ModelUniformDescriptor<float> mat4Array;
 };
 
+template <typename T>
+struct HeapArray
+{
+    T *data = nullptr;
+    uint32_t count = 0;
+};
+
 struct PerFrameUniformBindings
 {
-    std::vector<UniformBindingUI32> UI32;
-    std::vector<UniformBindingF1> Float1;
-    std::vector<UniformBindingV2F> Float2;
-    std::vector<UniformBindingV3F> Float3;
-    std::vector<UniformBindingV4F> Float4;
-    std::vector<UniformBindingM4F> Float16;
+    HeapArray<UniformBindingUI32> UI32;
+    HeapArray<UniformBindingF1> Float1;
+    HeapArray<UniformBindingV2F> Float2;
+    HeapArray<UniformBindingV3F> Float3;
+    HeapArray<UniformBindingV4F> Float4;
+    HeapArray<UniformBindingM4F> Float16;
 };
 
 struct PerModleUniformBindings
 {
-    std::vector<UniformBindingUI32Array> UI32;
-    std::vector<UniformBindingF1Array> Float1;
-    std::vector<UniformBindingV2FArray> Float2;
-    std::vector<UniformBindingV3FArray> Float3;
-    std::vector<UniformBindingV4FArray> Float4;
-    std::vector<UniformBindingM4FArray> Float16;
+    HeapArray<UniformBindingUI32Array> UI32;
+    HeapArray<UniformBindingF1Array> Float1;
+    HeapArray<UniformBindingV2FArray> Float2;
+    HeapArray<UniformBindingV3FArray> Float3;
+    HeapArray<UniformBindingV4FArray> Float4;
+    HeapArray<UniformBindingM4FArray> Float16;
 };
 
 struct ShaderProgram
@@ -219,6 +226,7 @@ struct PipelineShaderPrograms
     ShaderProgram depthPrePass;
     ShaderProgram shadowMapping;
     ShaderProgram lighting;
+    ShaderProgram transparent;
     ShaderProgram velocity;
     ShaderProgram taa;
     ShaderProgram toneMapping;
@@ -230,6 +238,7 @@ struct Pipeline
     RenderPass depthPrePass;
     RenderPass shadowMapping;
     RenderPass lighting;
+    RenderPass transparent;
     RenderPass velocity;
     RenderPass toneMapping;
     RenderPass taa;
@@ -284,7 +293,9 @@ struct RenderModelCreateInfo
     std::vector<BufferDescriptor> const *vertexBufferDescriptors = nullptr;
     BufferDescriptor const *indexBufferDescriptor = nullptr;
     sr::load::MaterialSource const *material = nullptr;
-    sr::math::Matrix4x4 model;
+    sr::math::Vec3 position = {0, 0, 0};
+    sr::math::Vec3 orientation = {0, 0, 0};
+    sr::math::Vec3 scale = {1, 1, 1};
     sr::math::Vec3 color;
     GLuint debugRenderModel;
 };
@@ -301,6 +312,8 @@ struct OrthographicFrustum
 
 struct DirectionalLightSource
 {
+    sr::math::Vec3 position = {0, 10000, 0};
+    sr::math::Vec3 orientation = {-1.57f, 0, 0};
     OrthographicFrustum frustum = {-2048.f, 2048.f, -2048.f, 2048.f, -2000.f, 1500.f};
     sr::math::Matrix4x4 projection = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 view = sr::math::CreateIdentityMatrix();

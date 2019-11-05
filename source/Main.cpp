@@ -3,20 +3,20 @@
  * This code is licensed under the MIT license (MIT)
  * (http://opensource.org/licenses/MIT)
  */
-#include "RenderDefinitions.hpp"
-#include "RenderConfiguration.hpp"
-#include "RenderPass.hpp"
-#include "RenderModel.hpp"
 #include "Camera.hpp"
-#include "Math.hpp"
 #include "Loader.hpp"
+#include "Math.hpp"
+#include "RenderConfiguration.hpp"
+#include "RenderDefinitions.hpp"
+#include "RenderModel.hpp"
+#include "RenderPass.hpp"
+#include "RenderPipeline.hpp"
 #include "TestModels.hpp"
 
 #include <ctime>
-#include <chrono>
-#include <type_traits>
 
 Camera g_camera = CreateCamera();
+sr::math::Vec3 g_cameraSpeed = {5, 5, 5};
 Camera g_prevCamera = CreateCamera();
 DirectionalLightSource g_directLight;
 constexpr uint32_t g_defaultWidth = 800;
@@ -26,8 +26,10 @@ TAABuffer g_taaBuffer = {};
 bool g_captureMouse = false;
 bool g_drawUi = true;
 bool g_isHotRealoadRequired = false;
-float g_shadowMapRotationX = -1.57f;
-uint32_t g_shadowMappingEnabled = 0;
+bool g_drawAABBs = false;
+uint32_t g_directLightEnabled = 1;
+uint32_t g_shadowMappingEnabled = 1;
+uint32_t g_pointLightEnabled = 0;
 uint32_t g_bumpMappingEnabled = 0;
 uint32_t g_toneMappingEnabled = 0;
 uint32_t g_taaEnabled = 0;
@@ -69,20 +71,16 @@ char const *g_renderModesStr[static_cast<uint32_t>(eRenderMode::Count)] = {
 
 sr::math::Matrix4x4 CreateCameraMatrix(sr::math::Vec3 pos, float xWorldAngle, float yWorldAngle)
 {
-    return sr::math::Mul(
-        sr::math::CreateTranslationMatrix(pos.x, pos.y, pos.z),
-        sr::math::Mul(
-            sr::math::CreateRotationMatrixY(yWorldAngle),
-            sr::math::CreateRotationMatrixX(xWorldAngle)));
+    return sr::math::CreateTranslationMatrix(pos.x, pos.y, pos.z) *
+           sr::math::CreateRotationMatrixY(yWorldAngle) *
+           sr::math::CreateRotationMatrixX(xWorldAngle);
 }
 
 sr::math::Matrix4x4 CreateViewMatrix(sr::math::Vec3 pos, float xWorldAngle, float yWorldAngle)
 {
-    return sr::math::Mul(
-        sr::math::Mul(
-            sr::math::CreateRotationMatrixX(-xWorldAngle),
-            sr::math::CreateRotationMatrixY(-yWorldAngle)),
-        sr::math::CreateTranslationMatrix(-pos.x, -pos.y, -pos.z));
+    return sr::math::CreateRotationMatrixX(-xWorldAngle) *
+           sr::math::CreateRotationMatrixY(-yWorldAngle) *
+           sr::math::CreateTranslationMatrix(-pos.x, -pos.y, -pos.z);
 }
 
 void GLFWKeyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
@@ -100,25 +98,25 @@ void GLFWKeyCallback(GLFWwindow *window, int key, int scancode, int action, int 
         {
         case GLFW_KEY_W:
             forward = sr::math::Mul(camera, sr::math::Vec4{0, 0, -1, 0});
-            forward *= 5.0f;
+            forward *= g_cameraSpeed.y;
             break;
         case GLFW_KEY_S:
             forward = sr::math::Mul(camera, sr::math::Vec4{0, 0, -1, 0});
-            forward *= -5.0f;
+            forward *= -g_cameraSpeed.y;
             break;
         case GLFW_KEY_A:
             right = sr::math::Mul(camera, sr::math::Vec4{-1, 0, 0, 0});
-            right *= 5.05f;
+            right *= g_cameraSpeed.x;
             break;
         case GLFW_KEY_D:
             right = sr::math::Mul(camera, sr::math::Vec4{-1, 0, 0, 0});
-            right *= -5.05f;
+            right *= -g_cameraSpeed.x;
             break;
         case GLFW_KEY_Q:
-            g_camera.pos.y -= 5.05f;
+            g_camera.pos.y -= g_cameraSpeed.z;
             break;
         case GLFW_KEY_E:
-            g_camera.pos.y += 5.05f;
+            g_camera.pos.y += g_cameraSpeed.z;
             break;
         default:
             io.KeysDown[key] = true;
@@ -206,7 +204,9 @@ void SetupGLFWCallbacks(GLFWwindow *window)
 
 void DrawUI(GLFWwindow *window)
 {
+#ifdef NDEBUG
     glPushGroupMarkerEXT(2, "UI");
+#endif
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
@@ -221,12 +221,13 @@ void DrawUI(GLFWwindow *window)
 
     ImGui::Text("Camera");
     {
-        ImGui::InputFloat("Near Plane", &g_camera.near);
-        ImGui::InputFloat("Far Plane", &g_camera.far);
-        ImGui::InputFloat("FOV", &g_camera.fov);
-        ImGui::Text("Aspect: %f", g_camera.aspect);
-        ImGui::InputFloat3("Position", g_camera.pos.data, 1);
-        ImGui::InputFloat2("XY Rads", &g_camera.xWorldAngle, 1);
+        ImGui::InputFloat("C Near Plane", &g_camera.near);
+        ImGui::InputFloat("C Far Plane", &g_camera.far);
+        ImGui::InputFloat("C FOV", &g_camera.fov);
+        ImGui::Text("C Aspect: %f", g_camera.aspect);
+        ImGui::InputFloat3("C Position", g_camera.pos.data, 1);
+        ImGui::InputFloat2("C XY Rads", &g_camera.xWorldAngle, 1);
+        ImGui::InputFloat3("Camera Speed XYZ", g_cameraSpeed.data);
     }
 
     ImGui::Spacing();
@@ -241,16 +242,34 @@ void DrawUI(GLFWwindow *window)
         ImGui::InputFloat("Depth Unit", &g_depthUnitScale);
 
         ImGui::NewLine();
+        static bool enableDirectLightCheckBoxValue = static_cast<bool>(g_directLightEnabled);
+        ImGui::Checkbox("Direct Light", &enableDirectLightCheckBoxValue);
+        g_directLightEnabled = static_cast<bool>(enableDirectLightCheckBoxValue);
+        ImGui::InputFloat3("DL Position", g_directLight.position.data);
+        ImGui::SliderFloat("DL Rotation X", &g_directLight.orientation.x, -3.14f, 3.14f, "%.5f");
+        ImGui::SliderFloat("DL Rotation Y", &g_directLight.orientation.y, -3.14f, 3.14f, "%.5f");
+        ImGui::SliderFloat("DL Rotation Z", &g_directLight.orientation.z, -3.14f, 3.14f, "%.5f");
+        ImGui::Text("Direct Light Frustum");
+        ImGui::InputFloat2("DL Left/Right", &g_directLight.frustum.left);
+        ImGui::InputFloat2("DL Bottom/Top", &g_directLight.frustum.bottom);
+        ImGui::InputFloat2("DL Near/Far", &g_directLight.frustum.near);
         static bool enableShadowMappingCheckBoxValue = static_cast<bool>(g_shadowMappingEnabled);
         ImGui::Checkbox("Shadow Mapping", &enableShadowMappingCheckBoxValue);
         g_shadowMappingEnabled = static_cast<bool>(enableShadowMappingCheckBoxValue);
-        ImGui::SliderFloat("Rotation X", &g_shadowMapRotationX, -3.14f, 3.14f, "%.5f");
+
+        ImGui::NewLine();
+        static bool enablePointLightCheckBoxValue = static_cast<bool>(g_pointLightEnabled);
+        ImGui::Checkbox("Point Light", &enablePointLightCheckBoxValue);
+        g_pointLightEnabled = static_cast<bool>(enablePointLightCheckBoxValue);
 
         ImGui::NewLine();
         static bool enableBumpMappingCheckboxValue = static_cast<bool>(g_bumpMappingEnabled);
         ImGui::Checkbox("Bump Mapping", &enableBumpMappingCheckboxValue);
         g_bumpMappingEnabled = static_cast<bool>(enableBumpMappingCheckboxValue);
         ImGui::SliderFloat("Bump map scale", &g_bumpMapScaleFactor, 0.0001f, 0.01f, "%.5f");
+
+        ImGui::NewLine();
+        ImGui::Checkbox("Draw AABBs", &g_drawAABBs);
 
         ImGui::NewLine();
         ImGui::Text("Temporal Antialiasing");
@@ -278,10 +297,12 @@ void DrawUI(GLFWwindow *window)
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+#ifdef NDEBUG
     glPopGroupMarkerEXT();
+#endif
 }
 
-std::vector<RenderModel> LoadModels(ShaderProgram const &program)
+std::vector<RenderModel> LoadOpaqueModels(ShaderProgram const &program)
 {
     std::vector<RenderModel> models;
     std::vector<sr::load::Geometry> geometries;
@@ -299,7 +320,6 @@ std::vector<RenderModel> LoadModels(ShaderProgram const &program)
         createInfo.geometry = &geometries[i];
         createInfo.indexBufferDescriptor = &indexBufferDescriptor;
         createInfo.material = &materials[createInfo.geometry->material];
-        createInfo.model = sr::math::CreateIdentityMatrix();
         createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
 
         models.push_back(CreateRenderModel(createInfo));
@@ -307,30 +327,20 @@ std::vector<RenderModel> LoadModels(ShaderProgram const &program)
             program.handle, models[i], g_shaderAttributesPositionNormalUV);
     }
 
-    size_t const size = models.size();
-    sr::load::LoadOBJ("data\\models\\box", "box.obj", geometries, materials);
-
-    for (uint32_t i = 0; i < size; ++i)
+    for (auto &material : materials)
     {
-        auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(geometries.back());
-        auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(geometries.back());
-        sr::load::MaterialSource const emptyMaterial = {};
-
-        RenderModelCreateInfo createInfo;
-        createInfo.color = sr::math::Vec3{1.f, 0, 0};
-        createInfo.debugRenderModel = 1;
-        createInfo.geometry = &geometries.back();
-        createInfo.indexBufferDescriptor = &indexBufferDescriptor;
-        createInfo.material = &emptyMaterial;
-        createInfo.model = sr::math::Mul(
-            sr::math::CreateTranslationMatrix(models[i].center),
-            sr::math::CreateScaleMatrix(10));
-        createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
-
-        models.push_back(CreateRenderModel(createInfo));
-        LinkRenderModelToShaderProgram(
-            program.handle, models.back(), g_shaderAttributesPositionNormalUV);
+        FreeMaterialSource(material);
     }
+
+    return models;
+}
+
+std::vector<RenderModel> LoadPointLightModels(ShaderProgram const &program)
+{
+    std::vector<RenderModel> models;
+    std::vector<sr::load::Geometry> geometries;
+    std::vector<sr::load::MaterialSource> materials;
+    sr::load::LoadOBJ("data\\models\\box", "box.obj", geometries, materials);
 
     for (uint32_t i = 0; i < g_pointLightCount; ++i)
     {
@@ -344,9 +354,8 @@ std::vector<RenderModel> LoadModels(ShaderProgram const &program)
         createInfo.geometry = &geometries.back();
         createInfo.indexBufferDescriptor = &indexBufferDescriptor;
         createInfo.material = &emptyMaterial;
-        createInfo.model = sr::math::Mul(
-            sr::math::CreateTranslationMatrix(g_pointLights[i]),
-            sr::math::CreateScaleMatrix(10));
+        createInfo.position = g_pointLights[i];
+        createInfo.scale = {10, 10, 10};
         createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
 
         models.push_back(CreateRenderModel(createInfo));
@@ -354,32 +363,78 @@ std::vector<RenderModel> LoadModels(ShaderProgram const &program)
             program.handle, models.back(), g_shaderAttributesPositionNormalUV);
     }
 
+    for (auto &material : materials)
     {
-        sr::load::LoadOBJ("data\\models\\quad", "quad.obj", geometries, materials);
+        FreeMaterialSource(material);
+    }
 
+    return models;
+}
+
+std::vector<RenderModel> LoadDynamicModels(ShaderProgram const &program)
+{
+    std::vector<RenderModel> models;
+    std::vector<sr::load::Geometry> geometries;
+    std::vector<sr::load::MaterialSource> materials;
+    sr::load::LoadOBJ("data\\models\\quad", "quad.obj", geometries, materials);
+
+    auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(geometries.back());
+    auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(geometries.back());
+
+    tinyobj::material_t material;
+    material.diffuse_texname = "shfsaida_2K_Albedo.jpg";
+    material.bump_texname = "shfsaida_2K_Bump.jpg";
+    material.normal_texname = "shfsaida_2K_Normal.jpg";
+    material.roughness_texname = "shfsaida_2K_Roughness.jpg";
+    material.unknown_parameter["mat"] = "marbel";
+    auto const materialSource = sr::load::CreateMaterialSource(
+        "data\\materials\\2k\\Rock_Cliffs_shfsaida_2K_surface_ms", material);
+
+    RenderModelCreateInfo createInfo;
+    createInfo.color = {1, 0, 0};
+    createInfo.debugRenderModel = 0;
+    createInfo.geometry = &geometries.back();
+    createInfo.indexBufferDescriptor = &indexBufferDescriptor;
+    createInfo.material = &materialSource;
+    createInfo.position = {0, 50, 0};
+    createInfo.orientation = {0, 6.28f * 0.65f, 0};
+    createInfo.scale = {100, 100, 100};
+    createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
+
+    models.push_back(CreateRenderModel(createInfo));
+    LinkRenderModelToShaderProgram(
+        program.handle, models.back(), g_shaderAttributesPositionNormalUV);
+
+    for (auto &material : materials)
+    {
+        FreeMaterialSource(material);
+    }
+
+    return models;
+}
+
+std::vector<RenderModel> LoadAABBModels(ShaderProgram const &program, std::vector<RenderModel> const &inputModels)
+{
+    std::vector<RenderModel> models;
+    std::vector<sr::load::Geometry> geometries;
+    std::vector<sr::load::MaterialSource> materials;
+    sr::load::LoadOBJ("data\\models\\box", "box.obj", geometries, materials);
+
+    size_t const size = inputModels.size();
+    for (auto const &model : inputModels)
+    {
         auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(geometries.back());
         auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(geometries.back());
-
-        tinyobj::material_t material;
-        material.diffuse_texname = "shfsaida_2K_Albedo.jpg";
-        material.bump_texname = "shfsaida_2K_Bump.jpg";
-        material.normal_texname = "shfsaida_2K_Normal.jpg";
-        material.roughness_texname = "shfsaida_2K_Roughness.jpg";
-        material.unknown_parameter["mat"] = "marbel";
-        auto const materialSource = sr::load::CreateMaterialSource(
-            "data\\materials\\2k\\Rock_Cliffs_shfsaida_2K_surface_ms", material);
+        sr::load::MaterialSource const emptyMaterial = {};
 
         RenderModelCreateInfo createInfo;
-        createInfo.color = {1, 0, 0};
-        createInfo.debugRenderModel = 0;
+        createInfo.color = sr::math::Vec3{1.f, 0, 0};
+        createInfo.debugRenderModel = 1;
         createInfo.geometry = &geometries.back();
         createInfo.indexBufferDescriptor = &indexBufferDescriptor;
-        createInfo.material = &materialSource;
-        createInfo.model = sr::math::Mul(
-            sr::math::CreateTranslationMatrix(0, 50.f, 0),
-            sr::math::Mul(
-                sr::math::CreateScaleMatrix(100.f),
-                sr::math::CreateRotationMatrixY(6.28f * 0.65f)));
+        createInfo.material = &emptyMaterial;
+        createInfo.position = (model.aabb.max + model.aabb.min) / 2.f;
+        createInfo.scale = model.aabb.max - createInfo.position;
         createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
 
         models.push_back(CreateRenderModel(createInfo));
@@ -402,6 +457,7 @@ PipelineShaderPrograms CreatePipelineShaderPrograms()
     desc.depthPrePass = CreateShaderProgram("shaders/depth_pre_pass.vert", "shaders/depth_pre_pass.frag");
     desc.shadowMapping = CreateShaderProgram("shaders/shadow_mapping.vert", "shaders/shadow_mapping.frag");
     desc.lighting = CreateShaderProgram("shaders/lighting.vert", "shaders/lighting.frag");
+    desc.transparent = CreateShaderProgram("shaders/lighting.vert", "shaders/lighting.frag");
     desc.velocity = CreateShaderProgram("shaders/velocity.vert", "shaders/velocity.frag");
     desc.toneMapping = CreateShaderProgram("shaders/tone_mapping.vert", "shaders/tone_mapping.frag");
     LinkRenderModelToShaderProgram(desc.lighting.handle, g_quadWallRenderModel, g_shaderAttributesPositionNormalUV);
@@ -413,7 +469,9 @@ PipelineShaderPrograms CreatePipelineShaderPrograms()
     return desc;
 }
 
-void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<RenderModel> const &models)
+void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc,
+                                  std::vector<RenderModel> const &opaqueModels,
+                                  std::vector<RenderModel> const &transparentModels)
 {
     {
         CreateShaderProgramUniformBindings(
@@ -438,7 +496,7 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                 UniformsDescriptor::PerModelFloat4{},
                 UniformsDescriptor::PerModelMat4{
                     {"uModelMat"},
-                    {reinterpret_cast<float const *>(models.data())},
+                    {reinterpret_cast<float const *>(opaqueModels.data())},
                     {offsetof(RenderModel, RenderModel::model)},
                     {sizeof(RenderModel)}},
             });
@@ -464,7 +522,7 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                 UniformsDescriptor::PerModelFloat4{},
                 UniformsDescriptor::PerModelMat4{
                     {"uModelMat"},
-                    {reinterpret_cast<float const *>(models.data())},
+                    {reinterpret_cast<float const *>(opaqueModels.data())},
                     {offsetof(RenderModel, RenderModel::model)},
                     {sizeof(RenderModel)}},
             });
@@ -477,16 +535,20 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                 //uint32_t
                 UniformsDescriptor::PerFrameUI32{
                     {"uRenderModeUint",
+                     "uDirectLightEnabledUint",
+                     "uPointLightEnabledUint",
                      "uShadowMappingEnabledUint",
                      "uBumpMappingEnabledUint",
                      "uTaaEnabledUint",
                      "uTaaJitterEnabledUint"},
                     {reinterpret_cast<uint32_t *>(&g_renderMode),
+                     &g_directLightEnabled,
+                     &g_pointLightEnabled,
                      &g_shadowMappingEnabled,
                      &g_bumpMappingEnabled,
                      &g_taaEnabled,
                      &g_taaJitterEnabled},
-                    {1, 1, 1, 1, 1}},
+                    {1, 1, 1, 1, 1, 1, 1}},
                 //floats
                 UniformsDescriptor::PerFrameFloat1{
                     {"uBumpMapScaleFactorFloat"},
@@ -520,11 +582,11 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                      "uRoughnessMapAvailableUint",
                      "uDebugRenderModeAvailableUint",
                      "uBrdfUint"},
-                    {reinterpret_cast<uint32_t const *>(models.data()),
-                     reinterpret_cast<uint32_t const *>(models.data()),
-                     reinterpret_cast<uint32_t const *>(models.data()),
-                     reinterpret_cast<uint32_t const *>(models.data()),
-                     reinterpret_cast<uint32_t const *>(models.data())},
+                    {reinterpret_cast<uint32_t const *>(opaqueModels.data()),
+                     reinterpret_cast<uint32_t const *>(opaqueModels.data()),
+                     reinterpret_cast<uint32_t const *>(opaqueModels.data()),
+                     reinterpret_cast<uint32_t const *>(opaqueModels.data()),
+                     reinterpret_cast<uint32_t const *>(opaqueModels.data())},
                     {offsetof(RenderModel, RenderModel::bumpTexture),
                      offsetof(RenderModel, RenderModel::metallicTexture),
                      offsetof(RenderModel, RenderModel::roughnessTexture),
@@ -541,14 +603,102 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                 //float3
                 UniformsDescriptor::PerModelFloat3{
                     {"uColor"},
-                    {reinterpret_cast<float const *>(models.data())},
+                    {reinterpret_cast<float const *>(opaqueModels.data())},
                     {offsetof(RenderModel, RenderModel::color)},
                     {sizeof(RenderModel)}},
                 UniformsDescriptor::PerModelFloat4{},
                 //mat4
                 UniformsDescriptor::PerModelMat4{
                     {"uModelMat"},
-                    {reinterpret_cast<float const *>(models.data())},
+                    {reinterpret_cast<float const *>(opaqueModels.data())},
+                    {offsetof(RenderModel, RenderModel::model)},
+                    {sizeof(RenderModel)}},
+            });
+    }
+
+    {
+        CreateShaderProgramUniformBindings(
+            desc.transparent,
+            UniformsDescriptor{
+                //uint32_t
+                UniformsDescriptor::PerFrameUI32{
+                    {"uRenderModeUint",
+                     "uDirectLightEnabledUint",
+                     "uPointLightEnabledUint",
+                     "uShadowMappingEnabledUint",
+                     "uBumpMappingEnabledUint",
+                     "uTaaEnabledUint",
+                     "uTaaJitterEnabledUint"},
+                    {reinterpret_cast<uint32_t *>(&g_renderMode),
+                     &g_directLightEnabled,
+                     &g_pointLightEnabled,
+                     &g_shadowMappingEnabled,
+                     &g_bumpMappingEnabled,
+                     &g_taaEnabled,
+                     &g_taaJitterEnabled},
+                    {1, 1, 1, 1, 1, 1, 1}},
+                //floats
+                UniformsDescriptor::PerFrameFloat1{
+                    {"uBumpMapScaleFactorFloat"},
+                    {&g_bumpMapScaleFactor},
+                    {1}},
+                UniformsDescriptor::PerFrameFloat2{},
+                //float3
+                UniformsDescriptor::PerFrameFloat3{
+                    {"uCameraPos", "uPointLightPosVec3Array"},
+                    {g_camera.pos.data,
+                     g_pointLights[0].data},
+                    {1, g_pointLightCount}},
+                UniformsDescriptor::PerFrameFloat4{},
+                //mat4
+                UniformsDescriptor::PerFrameMat4{
+                    {"uProjMat",
+                     "uProjUnjitMat",
+                     "uViewMat",
+                     "uDirLightProjMat",
+                     "uDirLightViewMat"},
+                    {g_camera.proj.data,
+                     g_taaBuffer.projUnjit.data,
+                     g_camera.view.data,
+                     g_directLight.projection.data,
+                     g_directLight.view.data},
+                    {1, 1, 1, 1, 1}},
+                //uint32_t array
+                UniformsDescriptor::PerModelUI32{
+                    {"uBumpMapAvailableUint",
+                     "uMetallicMapAvailableUint",
+                     "uRoughnessMapAvailableUint",
+                     "uDebugRenderModeAvailableUint",
+                     "uBrdfUint"},
+                    {reinterpret_cast<uint32_t const *>(transparentModels.data()),
+                     reinterpret_cast<uint32_t const *>(transparentModels.data()),
+                     reinterpret_cast<uint32_t const *>(transparentModels.data()),
+                     reinterpret_cast<uint32_t const *>(transparentModels.data()),
+                     reinterpret_cast<uint32_t const *>(transparentModels.data())},
+                    {offsetof(RenderModel, RenderModel::bumpTexture),
+                     offsetof(RenderModel, RenderModel::metallicTexture),
+                     offsetof(RenderModel, RenderModel::roughnessTexture),
+                     offsetof(RenderModel, RenderModel::debugRenderModel),
+                     offsetof(RenderModel, RenderModel::brdf)},
+                    {sizeof(RenderModel),
+                     sizeof(RenderModel),
+                     sizeof(RenderModel),
+                     sizeof(RenderModel),
+                     sizeof(RenderModel)}},
+                //float1
+                UniformsDescriptor::PerModelFloat1{},
+                UniformsDescriptor::PerModelFloat2{},
+                //float3
+                UniformsDescriptor::PerModelFloat3{
+                    {"uColor"},
+                    {reinterpret_cast<float const *>(transparentModels.data())},
+                    {offsetof(RenderModel, RenderModel::color)},
+                    {sizeof(RenderModel)}},
+                UniformsDescriptor::PerModelFloat4{},
+                //mat4
+                UniformsDescriptor::PerModelMat4{
+                    {"uModelMat"},
+                    {reinterpret_cast<float const *>(transparentModels.data())},
                     {offsetof(RenderModel, RenderModel::model)},
                     {sizeof(RenderModel)}},
             });
@@ -582,7 +732,7 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
                 UniformsDescriptor::PerModelMat4{
                     {"uPrevModelMat4", "uModelMat4"},
                     {reinterpret_cast<float const *>(g_taaBuffer.prevModels.data()),
-                     reinterpret_cast<float const *>(models.data())},
+                     reinterpret_cast<float const *>(opaqueModels.data())},
                     {0, offsetof(RenderModel, RenderModel::model)},
                     {sizeof(sr::math::Matrix4x4), sizeof(RenderModel)},
                 },
@@ -672,45 +822,49 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc, std::vector<Rend
 
 void UpdateModels(std::vector<RenderModel> &models)
 {
-    auto now = std::chrono::system_clock::now().time_since_epoch();
-    uint64_t const time = std::chrono::duration_cast<std::chrono::microseconds>(now).count();
-    float const s = std::sin(static_cast<float>(time));
-    models.back().model = sr::math::Mul(
-        sr::math::CreateRotationMatrixY(0.01f),
-        models.back().model);
+    models.back().model = sr::math::CreateRotationMatrixY(0.01f) * models.back().model;
 }
 
 void PrePassCommands(Pipeline &pipeline, std::vector<RenderModel> &models)
 {
-    {
-        g_directLight.view = sr::math::CreateRotationMatrixX(g_shadowMapRotationX);
-        //g_directLight.view = sr::math::Mul(
-        //    sr::math::CreateTranslationMatrix({0, 10000, 0}),
-        //    sr::math::CreateRotationMatrixX(g_shadowMapRotationX));
+    { // Update shadow map view frustum
+        g_directLight.view = CreateViewMatrix(g_directLight.position, g_directLight.orientation.x, g_directLight.orientation.y);
 
-        float far = FLT_MAX;
-        float near = -FLT_MAX;
+        sr::math::Vec3 min = { FLT_MAX, FLT_MAX, FLT_MAX };
+        sr::math::Vec3 max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
 
         for (auto const &model : models)
         {
-            sr::math::Vec3 const min = model.aabb.min + model.center;
-            sr::math::Vec3 const max = model.aabb.max + model.center;
-
             auto const aabb = sr::geo::AABB{
-                sr::math::Mul(g_directLight.view, sr::math::Vec4{min.x, min.y, min.z, 1}).xyz,
-                sr::math::Mul(g_directLight.view, sr::math::Vec4{max.x, max.y, max.z, 1}).xyz,
+                (g_directLight.view * sr::math::Vec4{model.aabb.min.x, model.aabb.min.y, model.aabb.min.z, 1}).xyz,
+                (g_directLight.view * sr::math::Vec4{model.aabb.max.x, model.aabb.max.y, model.aabb.max.z, 1}).xyz,
             };
-            auto const center = sr::math::Mul(g_directLight.view, sr::math::Vec4{model.center.x, model.center.y, model.center.z, 1});
 
-            far = aabb.max.z < far ? aabb.max.z : far;
-            far = aabb.min.z < far ? aabb.min.z : far;
-            near = aabb.max.z > near ? aabb.max.z : near;
-            near = aabb.min.z > near ? aabb.min.z : near;
+            min.x = aabb.min.x < min.x ? aabb.min.x : min.x;
+            min.y = aabb.min.y < min.y ? aabb.min.y : min.y;
+            min.z = aabb.min.z < min.z ? aabb.min.z : min.z;
+            min.x = aabb.max.x < min.x ? aabb.max.x : min.x;
+            min.y = aabb.max.y < min.y ? aabb.max.y : min.y;
+            min.z = aabb.max.z < min.z ? aabb.max.z : min.z;
+
+            max.x = aabb.max.x > max.x ? aabb.max.x : max.x;
+            max.y = aabb.max.y > max.y ? aabb.max.y : max.y;
+            max.z = aabb.max.z > max.z ? aabb.max.z : max.z;
+            max.x = aabb.min.x > max.x ? aabb.min.x : max.x;
+            max.y = aabb.min.y > max.y ? aabb.min.y : max.y;
+            max.z = aabb.min.z > max.z ? aabb.min.z : max.z;
         }
 
-        assert(far != near);
-        g_directLight.frustum.far = near;
-        g_directLight.frustum.near = far;
+        assert(min.x != max.x);
+        assert(min.y != max.y);
+        assert(min.z != max.z);
+
+        g_directLight.frustum.far = min.z;
+        g_directLight.frustum.near = max.z;
+        g_directLight.frustum.left = max.x;
+        g_directLight.frustum.right = min.x;
+        g_directLight.frustum.top = max.y;
+        g_directLight.frustum.bottom = min.y;
 
         g_directLight.projection = sr::math::CreateOrthographicProjectionMatrix(
             g_directLight.frustum.left,
@@ -787,6 +941,11 @@ void RenderPassLighting(Pipeline &pipeline, std::vector<RenderModel> const &mode
     ExecuteRenderPass(pipeline.lighting, models.data(), models.size());
 }
 
+void RenderPassTransparency(Pipeline &pipeline, std::vector<RenderModel> const &models)
+{
+    ExecuteRenderPass(pipeline.transparent, models.data(), models.size());
+}
+
 void RenderPassVelocity(Pipeline &pipeline, std::vector<RenderModel> const &models)
 {
     ExecuteRenderPass(pipeline.velocity, models.data(), models.size());
@@ -822,10 +981,19 @@ void MainLoop(GLFWwindow *window)
 
     std::vector<sr::load::Geometry> geometries;
     std::vector<sr::load::MaterialSource> materials;
+
     auto programs = CreatePipelineShaderPrograms();
-    auto models = LoadModels(programs.lighting);
-    g_taaBuffer.prevModels.resize(models.size());
-    CreatePipelineUniformBindngs(programs, models);
+    auto opaqueModels = LoadOpaqueModels(programs.lighting);
+    auto transparentModels = LoadAABBModels(programs.transparent, opaqueModels);
+    auto pointLightModels = LoadPointLightModels(programs.lighting);
+    opaqueModels.insert(opaqueModels.end(), pointLightModels.begin(), pointLightModels.end());
+    std::vector<RenderModel>().swap(pointLightModels);
+    auto dynamicModels = LoadDynamicModels(programs.lighting);
+    opaqueModels.insert(opaqueModels.end(), dynamicModels.begin(), dynamicModels.end());
+    std::vector<RenderModel>().swap(dynamicModels);
+
+    g_taaBuffer.prevModels.resize(opaqueModels.size());
+    CreatePipelineUniformBindngs(programs, opaqueModels, transparentModels);
     auto pipeline = CreateRenderPipeline(programs, swapchainFramebufferWidth, swapchainFramebufferHeight);
 
     while (!glfwWindowShouldClose(window))
@@ -838,7 +1006,7 @@ void MainLoop(GLFWwindow *window)
             DeleteRenderPipeline(pipeline);
 
             programs = CreatePipelineShaderPrograms();
-            CreatePipelineUniformBindngs(programs, models);
+            CreatePipelineUniformBindngs(programs, opaqueModels, transparentModels);
             pipeline = CreateRenderPipeline(programs, swapchainFramebufferWidth, swapchainFramebufferHeight);
 
             std::time_t const timestamp = std::time(nullptr);
@@ -848,12 +1016,16 @@ void MainLoop(GLFWwindow *window)
             g_isHotRealoadRequired = false;
         }
 
-        PrePassCommands(pipeline, models);
+        PrePassCommands(pipeline, opaqueModels);
 
-        RenderPassDepthPrePass(pipeline, models);
-        RenderPassShadowMap(pipeline, models);
-        RenderPassLighting(pipeline, models);
-        RenderPassVelocity(pipeline, models);
+        RenderPassDepthPrePass(pipeline, opaqueModels);
+        RenderPassShadowMap(pipeline, opaqueModels);
+        RenderPassLighting(pipeline, opaqueModels);
+        if (g_drawAABBs)
+        {
+            RenderPassTransparency(pipeline, transparentModels);
+        }
+        RenderPassVelocity(pipeline, opaqueModels);
         RenderPassToneMapping(pipeline);
         RenderPassTAA(pipeline);
         RenderPassDebug(pipeline);
