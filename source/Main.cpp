@@ -4,6 +4,7 @@
  * (http://opensource.org/licenses/MIT)
  */
 #include "Camera.hpp"
+#include "Input.hpp"
 #include "Loader.hpp"
 #include "Math.hpp"
 #include "RenderConfiguration.hpp"
@@ -15,38 +16,18 @@
 
 #include <ctime>
 
-Camera g_camera = CreateCamera();
-sr::math::Vec3 g_cameraSpeed = {5, 5, 5};
-Camera g_prevCamera = CreateCamera();
-DirectionalLightSource g_directLight;
 constexpr uint32_t g_defaultWidth = 800;
 constexpr uint32_t g_defaultHeight = 800;
-TAABuffer g_taaBuffer = {};
+
+Camera g_camera = CreateCamera();
+float g_cameraSpeed = 5;
+Camera g_prevCamera = CreateCamera();
 
 bool g_captureMouse = false;
 bool g_drawUi = true;
 bool g_isHotRealoadRequired = false;
 bool g_drawAABBs = false;
-uint32_t g_directLightEnabled = 1;
-uint32_t g_shadowMappingEnabled = 1;
-uint32_t g_pointLightEnabled = 0;
-uint32_t g_bumpMappingEnabled = 0;
-uint32_t g_toneMappingEnabled = 0;
-uint32_t g_taaEnabled = 0;
-uint32_t g_taaJitterEnabled = 0;
-float g_bumpMapScaleFactor = 0.00001f;
-float g_depthBiasScale = 0.1f;
-float g_depthUnitScale = 1.0f;
-uint32_t g_bumpMapAvailable = 0;
-uint32_t g_metallicMapAvailable = 0;
-uint32_t g_roughnessMapAvailable = 0;
-constexpr int32_t g_pointLightCount = 5;
-sr::math::Vec3 g_pointLights[g_pointLightCount] = {
-    {-1200, 200, -45},
-    {-700, 200, -45},
-    {0, 200, -45},
-    {700, 200, -45},
-    {1100, 200, -45}};
+
 enum class eRenderMode : uint32_t
 {
     Full = 0,
@@ -69,6 +50,34 @@ char const *g_renderModesStr[static_cast<uint32_t>(eRenderMode::Count)] = {
     "Metallic Maps",
     "Roughness Maps"};
 
+uint32_t g_directLightEnabled = 1;
+uint32_t g_shadowMappingEnabled = 1;
+uint32_t g_pointLightEnabled = 0;
+uint32_t g_bumpMappingEnabled = 0;
+uint32_t g_toneMappingEnabled = 0;
+uint32_t g_taaEnabled = 0;
+uint32_t g_taaJitterEnabled = 0;
+
+uint32_t g_bumpMapAvailable = 0;
+uint32_t g_metallicMapAvailable = 0;
+uint32_t g_roughnessMapAvailable = 0;
+
+float g_bumpMapScaleFactor = 0.00001f;
+float g_depthBiasScale = 0.1f;
+float g_depthUnitScale = 1.0f;
+TAABuffer g_taaBuffer = {};
+
+float g_ambientLightRadiantFlux = 0.5f;
+DirectionalLightSource g_directLight;
+float g_pointLightRadiantFlux = 2.5f;
+constexpr int32_t g_pointLightCount = 5;
+sr::math::Vec3 g_pointLights[g_pointLightCount] = {
+    {-1200, 200, -45},
+    {-700, 200, -45},
+    {0, 200, -45},
+    {700, 200, -45},
+    {1100, 200, -45}};
+
 sr::math::Matrix4x4 CreateCameraMatrix(sr::math::Vec3 pos, float xWorldAngle, float yWorldAngle)
 {
     return sr::math::CreateTranslationMatrix(pos.x, pos.y, pos.z) *
@@ -81,85 +90,6 @@ sr::math::Matrix4x4 CreateViewMatrix(sr::math::Vec3 pos, float xWorldAngle, floa
     return sr::math::CreateRotationMatrixX(-xWorldAngle) *
            sr::math::CreateRotationMatrixY(-yWorldAngle) *
            sr::math::CreateTranslationMatrix(-pos.x, -pos.y, -pos.z);
-}
-
-void GLFWKeyCallback(GLFWwindow *window, int key, int scancode, int action, int mods)
-{
-    auto &io = ImGui::GetIO();
-
-    sr::math::Vec4 forward = {};
-    sr::math::Vec4 right = {};
-    sr::math::Matrix4x4 const camera = CreateCameraMatrix(
-        g_camera.pos, g_camera.xWorldAngle, g_camera.yWorldAngle);
-
-    if (action == GLFW_PRESS || action == GLFW_REPEAT)
-    {
-        switch (key)
-        {
-        case GLFW_KEY_W:
-            forward = sr::math::Mul(camera, sr::math::Vec4{0, 0, -1, 0});
-            forward *= g_cameraSpeed.y;
-            break;
-        case GLFW_KEY_S:
-            forward = sr::math::Mul(camera, sr::math::Vec4{0, 0, -1, 0});
-            forward *= -g_cameraSpeed.y;
-            break;
-        case GLFW_KEY_A:
-            right = sr::math::Mul(camera, sr::math::Vec4{-1, 0, 0, 0});
-            right *= g_cameraSpeed.x;
-            break;
-        case GLFW_KEY_D:
-            right = sr::math::Mul(camera, sr::math::Vec4{-1, 0, 0, 0});
-            right *= -g_cameraSpeed.x;
-            break;
-        case GLFW_KEY_Q:
-            g_camera.pos.y -= g_cameraSpeed.z;
-            break;
-        case GLFW_KEY_E:
-            g_camera.pos.y += g_cameraSpeed.z;
-            break;
-        default:
-            io.KeysDown[key] = true;
-            break;
-        }
-    }
-    else if (action == GLFW_RELEASE)
-    {
-        switch (key)
-        {
-        case GLFW_KEY_F:
-            g_captureMouse = !g_captureMouse;
-            glfwSetInputMode(window, GLFW_CURSOR, g_captureMouse ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-            break;
-        case GLFW_KEY_F1:
-            g_shadowMappingEnabled = g_shadowMappingEnabled + 1 == 2 ? 0 : 1;
-            break;
-        case GLFW_KEY_F2:
-            g_bumpMappingEnabled = g_bumpMappingEnabled + 1 == 2 ? 0 : 1;
-            break;
-        case GLFW_KEY_F3:
-            g_renderMode = g_renderMode == eRenderMode::Full ? g_renderMode = eRenderMode::Count : g_renderMode;
-            g_renderMode = static_cast<eRenderMode>(static_cast<uint32_t>(g_renderMode) - 1);
-            break;
-        case GLFW_KEY_F4:
-            g_renderMode = static_cast<eRenderMode>(static_cast<uint32_t>(g_renderMode) + 1);
-            g_renderMode = g_renderMode == eRenderMode::Count ? g_renderMode = eRenderMode::Full : g_renderMode;
-            break;
-        case GLFW_KEY_F5:
-            printf("\033c");
-            g_isHotRealoadRequired = true;
-            break;
-        case GLFW_KEY_U:
-            g_drawUi = !g_drawUi;
-            break;
-        default:
-            io.KeysDown[key] = false;
-            break;
-        }
-    }
-
-    g_camera.pos += forward.xyz;
-    g_camera.pos += right.xyz;
 }
 
 void GLFWWindowSizeCallback(GLFWwindow *window, int width, int height)
@@ -197,7 +127,7 @@ void GLFWCursorPosCallback(GLFWwindow *window, double x, double y)
 
 void SetupGLFWCallbacks(GLFWwindow *window)
 {
-    glfwSetKeyCallback(window, GLFWKeyCallback);
+    glfwSetKeyCallback(window, sr::input::GLFWKeyCallback);
     glfwSetWindowSizeCallback(window, GLFWWindowSizeCallback);
     glfwSetCursorPosCallback(window, GLFWCursorPosCallback);
 }
@@ -227,7 +157,7 @@ void DrawUI(GLFWwindow *window)
         ImGui::Text("C Aspect: %f", g_camera.aspect);
         ImGui::InputFloat3("C Position", g_camera.pos.data, 1);
         ImGui::InputFloat2("C XY Rads", &g_camera.xWorldAngle, 1);
-        ImGui::InputFloat3("Camera Speed XYZ", g_cameraSpeed.data);
+        ImGui::InputFloat("Camera Speed", &g_cameraSpeed);
     }
 
     ImGui::Spacing();
@@ -242,17 +172,18 @@ void DrawUI(GLFWwindow *window)
         ImGui::InputFloat("Depth Unit", &g_depthUnitScale);
 
         ImGui::NewLine();
+        ImGui::Text("Ambient Light");
+        ImGui::SliderFloat("AL Radiant Flux", &g_ambientLightRadiantFlux, 0, 1);
+
+        ImGui::NewLine();
         static bool enableDirectLightCheckBoxValue = static_cast<bool>(g_directLightEnabled);
         ImGui::Checkbox("Direct Light", &enableDirectLightCheckBoxValue);
+        ImGui::SliderFloat("DL Radiant Flux", &g_directLight.radiantFlux, 0, 100);
         g_directLightEnabled = static_cast<bool>(enableDirectLightCheckBoxValue);
         ImGui::InputFloat3("DL Position", g_directLight.position.data);
         ImGui::SliderFloat("DL Rotation X", &g_directLight.orientation.x, -3.14f, 3.14f, "%.5f");
         ImGui::SliderFloat("DL Rotation Y", &g_directLight.orientation.y, -3.14f, 3.14f, "%.5f");
         ImGui::SliderFloat("DL Rotation Z", &g_directLight.orientation.z, -3.14f, 3.14f, "%.5f");
-        ImGui::Text("Direct Light Frustum");
-        ImGui::InputFloat2("DL Left/Right", &g_directLight.frustum.left);
-        ImGui::InputFloat2("DL Bottom/Top", &g_directLight.frustum.bottom);
-        ImGui::InputFloat2("DL Near/Far", &g_directLight.frustum.near);
         static bool enableShadowMappingCheckBoxValue = static_cast<bool>(g_shadowMappingEnabled);
         ImGui::Checkbox("Shadow Mapping", &enableShadowMappingCheckBoxValue);
         g_shadowMappingEnabled = static_cast<bool>(enableShadowMappingCheckBoxValue);
@@ -261,6 +192,7 @@ void DrawUI(GLFWwindow *window)
         static bool enablePointLightCheckBoxValue = static_cast<bool>(g_pointLightEnabled);
         ImGui::Checkbox("Point Light", &enablePointLightCheckBoxValue);
         g_pointLightEnabled = static_cast<bool>(enablePointLightCheckBoxValue);
+        ImGui::SliderFloat("PL Radiant Flux", &g_pointLightRadiantFlux, 0, 100);
 
         ImGui::NewLine();
         static bool enableBumpMappingCheckboxValue = static_cast<bool>(g_bumpMappingEnabled);
@@ -381,29 +313,57 @@ std::vector<RenderModel> LoadDynamicModels(ShaderProgram const &program)
     auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(geometries.back());
     auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(geometries.back());
 
-    tinyobj::material_t material;
-    material.diffuse_texname = "shfsaida_2K_Albedo.jpg";
-    material.bump_texname = "shfsaida_2K_Bump.jpg";
-    material.normal_texname = "shfsaida_2K_Normal.jpg";
-    material.roughness_texname = "shfsaida_2K_Roughness.jpg";
-    material.unknown_parameter["mat"] = "marbel";
-    auto const materialSource = sr::load::CreateMaterialSource(
-        "data\\materials\\2k\\Rock_Cliffs_shfsaida_2K_surface_ms", material);
+    {
+        tinyobj::material_t material;
+        material.diffuse_texname = "Brick_wall_006_COLOR.jpg";
+        material.bump_texname = "Brick_wall_006_DISP.jpg";
+        material.normal_texname = "Brick_wall_006_NRM.jpg";
+        material.roughness_texname = "Brick_wall_006_SPEC.jpg";
+        material.unknown_parameter["mat"] = "marbel";
+        auto const materialSource = sr::load::CreateMaterialSource(
+            "data\\materials\\custom\\brick_wall_006", material);
 
-    RenderModelCreateInfo createInfo;
-    createInfo.color = {1, 0, 0};
-    createInfo.debugRenderModel = 0;
-    createInfo.geometry = &geometries.back();
-    createInfo.indexBufferDescriptor = &indexBufferDescriptor;
-    createInfo.material = &materialSource;
-    createInfo.position = {0, 50, 0};
-    createInfo.orientation = {0, 6.28f * 0.65f, 0};
-    createInfo.scale = {100, 100, 100};
-    createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
+        RenderModelCreateInfo createInfo;
+        createInfo.color = {1, 0, 0};
+        createInfo.debugRenderModel = 0;
+        createInfo.geometry = &geometries.back();
+        createInfo.indexBufferDescriptor = &indexBufferDescriptor;
+        createInfo.material = &materialSource;
+        createInfo.position = {300, 50, 0};
+        createInfo.orientation = {0, 6.28f * 0.65f, 0};
+        createInfo.scale = {100, 100, 100};
+        createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
 
-    models.push_back(CreateRenderModel(createInfo));
-    LinkRenderModelToShaderProgram(
-        program.handle, models.back(), g_shaderAttributesPositionNormalUV);
+        models.push_back(CreateRenderModel(createInfo));
+        LinkRenderModelToShaderProgram(
+            program.handle, models.back(), g_shaderAttributesPositionNormalUV);
+    }
+
+    {
+        tinyobj::material_t material;
+        material.diffuse_texname = "shfsaida_2K_Albedo.jpg";
+        material.bump_texname = "shfsaida_2K_Bump.jpg";
+        material.normal_texname = "shfsaida_2K_Normal.jpg";
+        material.roughness_texname = "shfsaida_2K_Roughness.jpg";
+        material.unknown_parameter["mat"] = "marbel";
+        auto const materialSource = sr::load::CreateMaterialSource(
+            "data\\materials\\2k\\Rock_Cliffs_shfsaida_2K_surface_ms", material);
+
+        RenderModelCreateInfo createInfo;
+        createInfo.color = {1, 0, 0};
+        createInfo.debugRenderModel = 0;
+        createInfo.geometry = &geometries.back();
+        createInfo.indexBufferDescriptor = &indexBufferDescriptor;
+        createInfo.material = &materialSource;
+        createInfo.position = {0, 50, 0};
+        createInfo.orientation = {0, 6.28f * 0.65f, 0};
+        createInfo.scale = {100, 100, 100};
+        createInfo.vertexBufferDescriptors = &vertexBufferDescriptors;
+
+        models.push_back(CreateRenderModel(createInfo));
+        LinkRenderModelToShaderProgram(
+            program.handle, models.back(), g_shaderAttributesPositionNormalUV);
+    }
 
     for (auto &material : materials)
     {
@@ -459,10 +419,10 @@ PipelineShaderPrograms CreatePipelineShaderPrograms()
     desc.lighting = CreateShaderProgram("shaders/lighting.vert", "shaders/lighting.frag");
     desc.transparent = CreateShaderProgram("shaders/lighting.vert", "shaders/lighting.frag");
     desc.velocity = CreateShaderProgram("shaders/velocity.vert", "shaders/velocity.frag");
-    desc.toneMapping = CreateShaderProgram("shaders/tone_mapping.vert", "shaders/tone_mapping.frag");
-    LinkRenderModelToShaderProgram(desc.lighting.handle, g_quadWallRenderModel, g_shaderAttributesPositionNormalUV);
     desc.taa = CreateShaderProgram("shaders/taa.vert", "shaders/taa.frag");
     LinkRenderModelToShaderProgram(desc.taa.handle, g_quadWallRenderModel, g_shaderAttributesPositionNormalUV);
+    desc.toneMapping = CreateShaderProgram("shaders/tone_mapping.vert", "shaders/tone_mapping.frag");
+    LinkRenderModelToShaderProgram(desc.lighting.handle, g_quadWallRenderModel, g_shaderAttributesPositionNormalUV);
     desc.debug = CreateShaderProgram("shaders/debug.vert", "shaders/debug.frag");
     LinkRenderModelToShaderProgram(desc.debug.handle, g_quadWallRenderModel, g_shaderAttributesPositionNormalUV);
 
@@ -551,9 +511,9 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc,
                     {1, 1, 1, 1, 1, 1, 1}},
                 //floats
                 UniformsDescriptor::PerFrameFloat1{
-                    {"uBumpMapScaleFactorFloat"},
-                    {&g_bumpMapScaleFactor},
-                    {1}},
+                    {"uBumpMapScaleFactorFloat", "uAmbientLightRadiantFluxFloat", "uDirectLightRadiantFluxFloat", "uPointLightRadiantFluxFloat"},
+                    {&g_bumpMapScaleFactor, &g_ambientLightRadiantFlux, &g_directLight.radiantFlux, &g_pointLightRadiantFlux},
+                    {1, 1, 1, 1}},
                 UniformsDescriptor::PerFrameFloat2{},
                 //float3
                 UniformsDescriptor::PerFrameFloat3{
@@ -580,7 +540,7 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc,
                     {"uBumpMapAvailableUint",
                      "uMetallicMapAvailableUint",
                      "uRoughnessMapAvailableUint",
-                     "uDebugRenderModeAvailableUint",
+                     "uDebugRenderModeEnabledUint",
                      "uBrdfUint"},
                     {reinterpret_cast<uint32_t const *>(opaqueModels.data()),
                      reinterpret_cast<uint32_t const *>(opaqueModels.data()),
@@ -639,9 +599,9 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc,
                     {1, 1, 1, 1, 1, 1, 1}},
                 //floats
                 UniformsDescriptor::PerFrameFloat1{
-                    {"uBumpMapScaleFactorFloat"},
-                    {&g_bumpMapScaleFactor},
-                    {1}},
+                    {"uBumpMapScaleFactorFloat", "uAmbientLightRadiantFluxFloat", "uDirectLightRadiantFluxFloat", "uPointLightRadiantFluxFloat"},
+                    {&g_bumpMapScaleFactor, &g_ambientLightRadiantFlux, &g_directLight.radiantFlux, &g_pointLightRadiantFlux},
+                    {1, 1, 1, 1}},
                 UniformsDescriptor::PerFrameFloat2{},
                 //float3
                 UniformsDescriptor::PerFrameFloat3{
@@ -668,7 +628,7 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc,
                     {"uBumpMapAvailableUint",
                      "uMetallicMapAvailableUint",
                      "uRoughnessMapAvailableUint",
-                     "uDebugRenderModeAvailableUint",
+                     "uDebugRenderModeEnabledUint",
                      "uBrdfUint"},
                     {reinterpret_cast<uint32_t const *>(transparentModels.data()),
                      reinterpret_cast<uint32_t const *>(transparentModels.data()),
@@ -741,26 +701,6 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc,
 
     {
         CreateShaderProgramUniformBindings(
-            desc.toneMapping,
-            UniformsDescriptor{
-                UniformsDescriptor::PerFrameUI32{
-                    {"uToneMappingEnabledUint"}, {&g_toneMappingEnabled}, {1}},
-                UniformsDescriptor::PerFrameFloat1{},
-                UniformsDescriptor::PerFrameFloat2{},
-                UniformsDescriptor::PerFrameFloat3{},
-                UniformsDescriptor::PerFrameFloat4{},
-                UniformsDescriptor::PerFrameMat4{},
-                UniformsDescriptor::PerModelUI32{},
-                UniformsDescriptor::PerModelFloat1{},
-                UniformsDescriptor::PerModelFloat2{},
-                UniformsDescriptor::PerModelFloat3{},
-                UniformsDescriptor::PerModelFloat4{},
-                UniformsDescriptor::PerModelMat4{},
-            });
-    }
-
-    {
-        CreateShaderProgramUniformBindings(
             desc.taa,
             UniformsDescriptor{
                 UniformsDescriptor::PerFrameUI32{
@@ -801,6 +741,26 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc,
 
     {
         CreateShaderProgramUniformBindings(
+            desc.toneMapping,
+            UniformsDescriptor{
+                UniformsDescriptor::PerFrameUI32{
+                    {"uToneMappingEnabledUint"}, {&g_toneMappingEnabled}, {1}},
+                UniformsDescriptor::PerFrameFloat1{},
+                UniformsDescriptor::PerFrameFloat2{},
+                UniformsDescriptor::PerFrameFloat3{},
+                UniformsDescriptor::PerFrameFloat4{},
+                UniformsDescriptor::PerFrameMat4{},
+                UniformsDescriptor::PerModelUI32{},
+                UniformsDescriptor::PerModelFloat1{},
+                UniformsDescriptor::PerModelFloat2{},
+                UniformsDescriptor::PerModelFloat3{},
+                UniformsDescriptor::PerModelFloat4{},
+                UniformsDescriptor::PerModelMat4{},
+            });
+    }
+
+    {
+        CreateShaderProgramUniformBindings(
             desc.debug,
             UniformsDescriptor{
                 UniformsDescriptor::PerFrameUI32{
@@ -820,6 +780,75 @@ void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc,
     }
 }
 
+void UpdateInputs(GLFWwindow *window)
+{
+    assert(window != nullptr);
+
+    sr::input::UpdateInputs();
+
+    sr::math::Vec4 forward = {};
+    sr::math::Vec4 right = {};
+    sr::math::Matrix4x4 const camera = CreateCameraMatrix(
+        g_camera.pos, g_camera.xWorldAngle, g_camera.yWorldAngle);
+
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::W)] != sr::input::KeyAction::NONE)
+    {
+        forward = sr::math::Mul(camera, sr::math::Vec4{0, 0, -1, 0});
+        forward *= g_cameraSpeed;
+    }
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::S)] != sr::input::KeyAction::NONE)
+    {
+        forward = sr::math::Mul(camera, sr::math::Vec4{0, 0, -1, 0});
+        forward *= -g_cameraSpeed;
+    }
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::A)] != sr::input::KeyAction::NONE)
+    {
+        right = sr::math::Mul(camera, sr::math::Vec4{-1, 0, 0, 0});
+        right *= g_cameraSpeed;
+    }
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::D)] != sr::input::KeyAction::NONE)
+    {
+        right = sr::math::Mul(camera, sr::math::Vec4{-1, 0, 0, 0});
+        right *= -g_cameraSpeed;
+    }
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::Q)] != sr::input::KeyAction::NONE)
+    {
+        g_camera.pos.y -= g_cameraSpeed;
+    }
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::E)] != sr::input::KeyAction::NONE)
+    {
+        g_camera.pos.y += g_cameraSpeed;
+    }
+
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::F)] == sr::input::KeyAction::RELEASE)
+    {
+        g_captureMouse = !g_captureMouse;
+        glfwSetInputMode(window, GLFW_CURSOR, g_captureMouse ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+    }
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::F3)] == sr::input::KeyAction::RELEASE)
+    {
+        g_renderMode = g_renderMode == eRenderMode::Full ? g_renderMode = eRenderMode::Count : g_renderMode;
+        g_renderMode = static_cast<eRenderMode>(static_cast<uint32_t>(g_renderMode) - 1);
+    }
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::F4)] == sr::input::KeyAction::RELEASE)
+    {
+        g_renderMode = static_cast<eRenderMode>(static_cast<uint32_t>(g_renderMode) + 1);
+        g_renderMode = g_renderMode == eRenderMode::Count ? g_renderMode = eRenderMode::Full : g_renderMode;
+    }
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::F5)] == sr::input::KeyAction::RELEASE)
+    {
+        printf("\033c");
+        g_isHotRealoadRequired = true;
+    }
+    if (sr::input::g_inputs.keys[static_cast<uint32_t>(sr::input::Keys::U)] == sr::input::KeyAction::RELEASE)
+    {
+        g_drawUi = !g_drawUi;
+    }
+
+    g_camera.pos += forward.xyz;
+    g_camera.pos += right.xyz;
+}
+
 void UpdateModels(std::vector<RenderModel> &models)
 {
     models.back().model = sr::math::CreateRotationMatrixY(0.01f) * models.back().model;
@@ -828,10 +857,13 @@ void UpdateModels(std::vector<RenderModel> &models)
 void PrePassCommands(Pipeline &pipeline, std::vector<RenderModel> &models)
 {
     { // Update shadow map view frustum
-        g_directLight.view = CreateViewMatrix(g_directLight.position, g_directLight.orientation.x, g_directLight.orientation.y);
+        g_directLight.view = sr::math::CreateRotationMatrixZ(-g_directLight.orientation.z) *
+                             sr::math::CreateRotationMatrixY(-g_directLight.orientation.y) *
+                             sr::math::CreateRotationMatrixX(-g_directLight.orientation.x) *
+                             sr::math::CreateTranslationMatrix(-g_directLight.position);
 
-        sr::math::Vec3 min = { FLT_MAX, FLT_MAX, FLT_MAX };
-        sr::math::Vec3 max = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+        sr::math::Vec3 min = {FLT_MAX, FLT_MAX, FLT_MAX};
+        sr::math::Vec3 max = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
 
         for (auto const &model : models)
         {
@@ -951,11 +983,6 @@ void RenderPassVelocity(Pipeline &pipeline, std::vector<RenderModel> const &mode
     ExecuteRenderPass(pipeline.velocity, models.data(), models.size());
 }
 
-void RenderPassToneMapping(Pipeline &pipeline)
-{
-    ExecuteRenderPass(pipeline.toneMapping, &g_quadWallRenderModel, 1);
-}
-
 void RenderPassTAA(Pipeline &pipeline)
 {
     ExecuteRenderPass(pipeline.taa, &g_quadWallRenderModel, 1);
@@ -964,6 +991,16 @@ void RenderPassTAA(Pipeline &pipeline)
     pipeline.taa.subPasses[1].active = !pipeline.taa.subPasses[0].active;
 
     g_taaBuffer.count++;
+}
+
+void RenderPassToneMapping(Pipeline &pipeline)
+{
+    ExecuteRenderPass(pipeline.toneMapping, &g_quadWallRenderModel, 1);
+
+    pipeline.toneMapping.subPasses[0].desc.dependencies[0].handle =
+        pipeline.taa.subPasses[0].active
+            ? pipeline.taa.subPasses[0].desc.attachments[0].handle
+            : pipeline.taa.subPasses[1].desc.attachments[0].handle;
 }
 
 void RenderPassDebug(Pipeline &pipeline)
@@ -998,7 +1035,7 @@ void MainLoop(GLFWwindow *window)
 
     while (!glfwWindowShouldClose(window))
     {
-        glfwPollEvents();
+        UpdateInputs(window);
         glfwGetFramebufferSize(window, &swapchainFramebufferWidth, &swapchainFramebufferHeight);
 
         if (g_isHotRealoadRequired)
@@ -1026,8 +1063,8 @@ void MainLoop(GLFWwindow *window)
             RenderPassTransparency(pipeline, transparentModels);
         }
         RenderPassVelocity(pipeline, opaqueModels);
-        RenderPassToneMapping(pipeline);
         RenderPassTAA(pipeline);
+        RenderPassToneMapping(pipeline);
         RenderPassDebug(pipeline);
 
         ExecuteBackBufferBlitRenderPass(

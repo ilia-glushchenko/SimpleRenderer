@@ -1,23 +1,35 @@
 #version 460
 
+//Model
 layout (location = 10) uniform vec3 uColor;
 layout (location = 11) uniform mat4 uModelMat;
+layout (location = 17) uniform vec3 uCameraPos;
 
+//Modes
 layout (location = 20) uniform uint uRenderModeUint;
-layout (location = 21) uniform uint uPointLightEnabledUint;
-layout (location = 22) uniform uint uDirectLightEnabledUint;
-layout (location = 23) uniform uint uTaaJitterEnabledUint;
-layout (location = 24) uniform uint uShadowMappingEnabledUint;
-layout (location = 26) uniform uint uBumpMapAvailableUint;
-layout (location = 27) uniform uint uMetallicMapAvailableUint;
-layout (location = 28) uniform uint uRoughnessMapAvailableUint;
-layout (location = 29) uniform uint uBumpMappingEnabledUint;
-layout (location = 30) uniform float uBumpMapScaleFactorFloat;
-layout (location = 31) uniform vec3 uCameraPos;
-layout (location = 32) uniform uint uDebugRenderModeAvailableUint;
-layout (location = 33) uniform uint uBrdfUint;
-layout (location = 34) uniform vec3 uPointLightPosVec3Array[5];
+layout (location = 21) uniform uint uDebugRenderModeEnabledUint;
 
+//Techniques
+layout (location = 22) uniform uint uShadowMappingEnabledUint;
+layout (location = 23) uniform uint uBumpMappingEnabledUint;
+layout (location = 24) uniform uint uTaaJitterEnabledUint;
+
+//Materials
+layout (location = 25) uniform uint  uBumpMapAvailableUint;
+layout (location = 26) uniform float uBumpMapScaleFactorFloat;
+layout (location = 27) uniform uint  uMetallicMapAvailableUint;
+layout (location = 28) uniform uint  uRoughnessMapAvailableUint;
+layout (location = 29) uniform uint  uBrdfUint;
+
+//Light
+layout (location = 30) uniform float uAmbientLightRadiantFluxFloat;
+layout (location = 31) uniform uint  uDirectLightEnabledUint;
+layout (location = 32) uniform float uDirectLightRadiantFluxFloat;
+layout (location = 33) uniform uint  uPointLightEnabledUint;
+layout (location = 34) uniform float uPointLightRadiantFluxFloat;
+layout (location = 35) uniform vec3  uPointLightPosVec3Array[5];
+
+//Samplers
 layout (binding = 0, location = 50) uniform sampler2D uShadowMapSampler2D;
 layout (binding = 1, location = 51) uniform sampler2D uAlbedoMapSampler2D;
 layout (binding = 2, location = 52) uniform sampler2D uNormalMapSampler2D;
@@ -208,16 +220,17 @@ float LightFalloffWindowingFunction(float r0, float rMin, float rMax, float r)
 
 vec3 CalculateRadiance(float shadowMapDepth, vec2 uv, vec3 n, vec3 shadowPosMVP, mat3 TBN)
 {
-    vec3 view = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
+    vec3 viewDirection = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
 
-    if (bool(uBumpMapAvailableUint) && bool(uBumpMappingEnabledUint)) {
+    if (bool(uBumpMapAvailableUint) && bool(uBumpMappingEnabledUint))
+    {
         float h = AnisatropicTextureSample(uBumpMapSampler2D, uv).r;
-        uv = uv + h * (TBN * view.xyz).xy * uBumpMapScaleFactorFloat;
+        uv = uv + h * (TBN * viewDirection.xyz).xy * uBumpMapScaleFactorFloat;
     }
     vec3 ssAlbedo = AnisatropicTextureSample(uAlbedoMapSampler2D, uv).rgb;
     vec3 normal = normalize(TBN * normalize((AnisatropicTextureSample(uNormalMapSampler2D, uv).xyz * 2) - 1));
     float ro = bool(uRoughnessMapAvailableUint) ? AnisatropicTextureSample(uRoughnessSampler2D, uv).r : 1;
-    vec3 radiance = ssAlbedo * 0.2f;
+    vec3 radiance = ssAlbedo * uAmbientLightRadiantFluxFloat;
 
     if (bool(uPointLightEnabledUint))
     {
@@ -225,12 +238,12 @@ vec3 CalculateRadiance(float shadowMapDepth, vec2 uv, vec3 n, vec3 shadowPosMVP,
         {
             vec3 pointLightDir = -normalize(positionWorld.xyz / positionWorld.w - uPointLightPosVec3Array[i]);
             vec3 fDiffPL = ShirleyFresnelSubSurfaceAlbedo(
-                FresnelSchlickF0(AirIOR, MarbleIOR), ssAlbedo, view, normal, pointLightDir); //Shirley
+                FresnelSchlickF0(AirIOR, MarbleIOR), ssAlbedo, viewDirection, normal, pointLightDir); //Shirley
             //vec3 fDiffPL = ssAlbedo / PI; //Lambert
-            vec3 fSpecPL = PI *
-                (uBrdfUint == 0 ? CookTorance(view, normal, pointLightDir, ro)
-                    : CookToranceLinen(view, normal, pointLightDir, ro))
-                * POINT_LIGHT_COLOR * max(dot(n, pointLightDir), 0);
+            vec3 fSpecPL = PI * (uBrdfUint == 0
+                    ? CookTorance(viewDirection, normal, pointLightDir, ro)
+                    : CookToranceLinen(viewDirection, normal, pointLightDir, ro))
+                * POINT_LIGHT_COLOR * uPointLightRadiantFluxFloat * max(dot(n, pointLightDir), 0);
 
             float d = distance(uPointLightPosVec3Array[i], positionWorld.xyz / positionWorld.w);
             radiance += LightFalloffWindowingFunction(1, 1, 350, d) * 100000 * (fSpecPL + fDiffPL);
@@ -243,9 +256,9 @@ vec3 CalculateRadiance(float shadowMapDepth, vec2 uv, vec3 n, vec3 shadowPosMVP,
         if (bool(uShadowMappingEnabledUint) && shadowPosMVP.z - 0.01f < shadowMapDepth)
         {
             fSpecDL = PI * (uBrdfUint == 0
-                ? CookTorance(view, normal, directionalLightDir, ro)
-                : CookToranceLinen(view, normal, directionalLightDir, ro))
-                    * SUN_LIGHT_COLOR * max(dot(n, directionalLightDir), 0);
+                    ? CookTorance(viewDirection, normal, directionalLightDir, ro)
+                    : CookToranceLinen(viewDirection, normal, directionalLightDir, ro))
+                * SUN_LIGHT_COLOR * uDirectLightRadiantFluxFloat * max(dot(n, directionalLightDir), 0);
 
             radiance += (fSpecDL + ssAlbedo / PI);
         }
@@ -268,7 +281,7 @@ void main()
 
     if (uRenderModeUint == 0) // Full
     {
-        if (bool(uDebugRenderModeAvailableUint)){
+        if (bool(uDebugRenderModeEnabledUint)){
             outColor = vec4(uColor, 0.3f);
         }
         else{

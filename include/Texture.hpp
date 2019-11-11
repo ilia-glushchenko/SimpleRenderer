@@ -98,8 +98,8 @@ GLuint CreateDepthTexture(uint32_t width, uint32_t height)
     Texture2DDescriptor desc;
     desc.sWrap = GL_CLAMP_TO_EDGE;
     desc.tWrap = GL_CLAMP_TO_EDGE;
-    desc.minFilter = GL_NEAREST;
-    desc.magFilter = GL_NEAREST;
+    desc.minFilter = GL_LINEAR;
+    desc.magFilter = GL_LINEAR;
     desc.internalFormat = GL_DEPTH_COMPONENT32;
     desc.format = GL_DEPTH_COMPONENT;
     desc.type = GL_FLOAT;
@@ -119,7 +119,26 @@ GLuint CreateEmptyRGBATexture(int32_t width, int32_t height)
     return CreateTexture(sr::load::TextureSource{"", nullptr, width, height, 4, GL_RGBA});
 }
 
-GLuint CreateColorAttachment(int32_t width, int32_t height)
+GLuint CreatePointColorAttachment(int32_t width, int32_t height)
+{
+    GLuint handle = 0;
+
+    auto const source = sr::load::TextureSource{ "", nullptr, width, height, 4, GL_RGBA };
+    auto desc = CreateDefaultTexture2DDescriptor(source);
+    desc.internalFormat = GL_RGBA32F;
+    desc.type = GL_FLOAT;
+    desc.sWrap = GL_CLAMP;
+    desc.tWrap = GL_CLAMP;
+    desc.magFilter = GL_LINEAR;
+    desc.minFilter = GL_LINEAR;
+    desc.maxAnisatropy = 1.f;
+
+    CreateTextures(source, desc, &handle, 1);
+
+    return handle;
+}
+
+GLuint CreateLinearColorAttachment(int32_t width, int32_t height)
 {
     GLuint handle = 0;
 

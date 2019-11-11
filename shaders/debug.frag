@@ -41,7 +41,7 @@ bool IsNan(vec4 color)
 // #define NAN
 // #define TONE_MAPPING
 // #define COLOR_DIST
-// #define VELOCITY
+//#define VELOCITY
 
 void main()
 {
@@ -49,7 +49,7 @@ void main()
     vec3 toneMappedColor = texture(uToneMappingTextureSampler2D, uv).rgb;
     vec3 taaColor = texture(uTaaDrawTextureSampler2D, uv).rgb;
 
-    outColor = bool(uTaaEnabledUint) ? vec4(taaColor, 1) : vec4(lightingColor, 1);
+    outColor = vec4(toneMappedColor, 1);
 
 #ifdef NAN
     vec4 color = texture(uLightingColorTextureSampler2D, uv);
@@ -67,7 +67,7 @@ void main()
 #endif
 
 #ifdef VELOCITY
-    outColor = vec4(abs(texture(uVelocityTextureSampler2D, uv).xy) * 1000, 0, 1);
+    outColor = vec4(abs(texture(uVelocityTextureSampler2D, uv).xy) * 100, 0, 1);
 #endif
 
     //outColor = vec4((toneMappedColor - taaColor) * 1000f, 1);

@@ -52,6 +52,7 @@ set(SIMPLE_REDNERER_HEADERS
     include/Math.hpp
     include/Loader.hpp
     include/Geometry.hpp
+    include/Input.hpp
 )
 
 set(SIMPLE_RENDERER_SOURCES

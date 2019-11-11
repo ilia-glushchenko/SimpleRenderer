@@ -240,8 +240,8 @@ struct Pipeline
     RenderPass lighting;
     RenderPass transparent;
     RenderPass velocity;
-    RenderPass toneMapping;
     RenderPass taa;
+    RenderPass toneMapping;
     RenderPass debug;
 };
 
@@ -313,8 +313,14 @@ struct OrthographicFrustum
 struct DirectionalLightSource
 {
     sr::math::Vec3 position = {0, 10000, 0};
-    sr::math::Vec3 orientation = {-1.57f, 0, 0};
+    sr::math::Vec3 orientation = {-1.5f, -0.5f, 0};
     OrthographicFrustum frustum = {-2048.f, 2048.f, -2048.f, 2048.f, -2000.f, 1500.f};
     sr::math::Matrix4x4 projection = sr::math::CreateIdentityMatrix();
     sr::math::Matrix4x4 view = sr::math::CreateIdentityMatrix();
+    float radiantFlux = 1.5f;
+};
+
+struct ShadowingMaskingFunction
+{
+
 };

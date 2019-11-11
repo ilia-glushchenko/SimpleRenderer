@@ -9,7 +9,7 @@
 
 //ToDo: I'm trying the no include thing, let's see
 GLuint CreateDepthTexture(uint32_t width, uint32_t height);
-GLuint CreateColorAttachment(int32_t width, int32_t height);
+GLuint CreateLinearColorAttachment(int32_t width, int32_t height);
 void DeleteRenderPass(RenderPass &pass);
 RenderPass CreateRenderPass(SubPassDescriptor const *desc, uint8_t count,
                             ShaderProgram program,
@@ -61,7 +61,7 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
             pipeline.shadowMapping.subPasses[0].desc.attachments[0].handle};
         desc.attachmentCount = 2;
         desc.attachments[0] = SubPassAttachmentDescriptor{
-            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateLinearColorAttachment(width, height)};
         desc.attachments[1] = SubPassAttachmentDescriptor{
             GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, pipeline.depthPrePass.subPasses[0].desc.attachments[0].handle};
         desc.depthMask = GL_FALSE;
@@ -100,7 +100,7 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
 
         desc.attachmentCount = 2;
         desc.attachments[0] = SubPassAttachmentDescriptor{
-            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreatePointColorAttachment(width, height)};
         desc.attachments[1] = SubPassAttachmentDescriptor{
             GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, pipeline.depthPrePass.subPasses[0].desc.attachments[0].handle};
         desc.depthMask = GL_FALSE;
@@ -113,33 +113,14 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
     }
 
     {
-        SubPassDescriptor desc;
-        desc.dependencyCount = 1;
-        desc.dependencies[0] = SubPassDependencyDescriptor{
-            GL_TEXTURE0,
-            GL_TEXTURE_2D,
-            pipeline.lighting.subPasses[0].desc.attachments[0].handle};
-        desc.attachmentCount = 1;
-        desc.attachments[0] = SubPassAttachmentDescriptor{
-            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
-        desc.depthMask = GL_FALSE;
-        desc.depthFunc = GL_ALWAYS;
-        desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
-
-        auto const name = "Tone Mapping";
-        pipeline.toneMapping = CreateRenderPass(
-            &desc, 1, programs.toneMapping, width, height, name, static_cast<uint8_t>(std::strlen(name)));
-    }
-
-    {
-        auto const texture1 = CreateColorAttachment(width, height);
-        auto const texture2 = CreateColorAttachment(width, height);
+        auto const texture1 = CreateLinearColorAttachment(width, height);
+        auto const texture2 = CreateLinearColorAttachment(width, height);
 
         SubPassDescriptor desc[2];
 
         desc[0].dependencyCount = 4;
         desc[0].dependencies[0] = SubPassDependencyDescriptor{
-            GL_TEXTURE0, GL_TEXTURE_2D, pipeline.toneMapping.subPasses[0].desc.attachments[0].handle};
+            GL_TEXTURE0, GL_TEXTURE_2D, pipeline.lighting.subPasses[0].desc.attachments[0].handle};
         desc[0].dependencies[1] = SubPassDependencyDescriptor{
             GL_TEXTURE1, GL_TEXTURE_2D, pipeline.lighting.subPasses[0].desc.attachments[1].handle};
         desc[0].dependencies[2] = SubPassDependencyDescriptor{GL_TEXTURE2, GL_TEXTURE_2D, texture2};
@@ -166,6 +147,25 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         pipeline.taa = CreateRenderPass(
             desc, 2, programs.taa, width, height, name, static_cast<uint8_t>(std::strlen(name)));
         pipeline.taa.subPasses[1].active = false;
+    }
+
+    {
+        SubPassDescriptor desc;
+        desc.dependencyCount = 1;
+        desc.dependencies[0] = SubPassDependencyDescriptor{
+            GL_TEXTURE0,
+            GL_TEXTURE_2D,
+            pipeline.taa.subPasses[0].desc.attachments[0].handle};
+        desc.attachmentCount = 1;
+        desc.attachments[0] = SubPassAttachmentDescriptor{
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateLinearColorAttachment(width, height)};
+        desc.depthMask = GL_FALSE;
+        desc.depthFunc = GL_ALWAYS;
+        desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
+
+        auto const name = "Tone Mapping";
+        pipeline.toneMapping = CreateRenderPass(
+            &desc, 1, programs.toneMapping, width, height, name, static_cast<uint8_t>(std::strlen(name)));
     }
 
     {
@@ -197,7 +197,7 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
             pipeline.taa.subPasses[0].desc.attachments[0].handle};
         desc.attachmentCount = 1;
         desc.attachments[0] = SubPassAttachmentDescriptor{
-            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateColorAttachment(width, height)};
+            GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateLinearColorAttachment(width, height)};
         desc.depthMask = GL_FALSE;
         desc.depthFunc = GL_ALWAYS;
         desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
