@@ -3,6 +3,9 @@
 //Model
 layout (location = 10) uniform vec3 uColor;
 layout (location = 11) uniform mat4 uModelMat;
+layout (location = 12) uniform mat4 uViewMat;
+layout (location = 13) uniform mat4 uProjMat;
+layout (location = 16) uniform mat4 uProjUnjitMat;
 layout (location = 17) uniform vec3 uCameraPos;
 
 //Modes
@@ -30,12 +33,13 @@ layout (location = 34) uniform float uPointLightRadiantFluxFloat;
 layout (location = 35) uniform vec3  uPointLightPosVec3Array[5];
 
 //Samplers
-layout (binding = 0, location = 50) uniform sampler2D uShadowMapSampler2D;
-layout (binding = 1, location = 51) uniform sampler2D uAlbedoMapSampler2D;
-layout (binding = 2, location = 52) uniform sampler2D uNormalMapSampler2D;
-layout (binding = 3, location = 53) uniform sampler2D uBumpMapSampler2D;
-layout (binding = 4, location = 54) uniform sampler2D uMetallicSampler2D;
-layout (binding = 5, location = 55) uniform sampler2D uRoughnessSampler2D;
+layout (binding = 0, location = 50) uniform sampler2D uDepthTextureSampler2D;
+layout (binding = 1, location = 51) uniform sampler2D uShadowMapSampler2D;
+layout (binding = 2, location = 52) uniform sampler2D uAlbedoMapSampler2D;
+layout (binding = 3, location = 53) uniform sampler2D uNormalMapSampler2D;
+layout (binding = 4, location = 54) uniform sampler2D uBumpMapSampler2D;
+layout (binding = 5, location = 55) uniform sampler2D uMetallicSampler2D;
+layout (binding = 6, location = 56) uniform sampler2D uRoughnessSampler2D;
 
 layout (location = 0) in vec4 positionWorld;
 layout (location = 1) in vec4 positionView;
@@ -218,6 +222,62 @@ float LightFalloffWindowingFunction(float r0, float rMin, float rMax, float r)
     return pow(r0 / max(r, rMin), 2) * pow(max(1 - pow(r / rMax, 4), 0), 2);
 }
 
+vec3 ViewPosFromDepth(float depth, vec2 TexCoord)
+{
+    vec4 clipSpacePosition = vec4(TexCoord * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec4 viewSpacePosition = bool(uTaaJitterEnabledUint)
+        ? inverse(uProjMat) * clipSpacePosition
+        : inverse(uProjUnjitMat) * clipSpacePosition;
+    viewSpacePosition /= viewSpacePosition.w;
+
+    return viewSpacePosition.xyz;
+}
+
+float HBAO(vec2 uv, vec3 n)
+{
+    ivec2 wh = textureSize(uDepthTextureSampler2D, 0);
+
+    float dx = 1.0f / wh.x;
+    float dy = 1.0f / wh.y;
+
+    const int HBAO_SAMPLES = 4;
+
+    vec3 minDirection = normalize(ViewPosFromDepth(texture(uDepthTextureSampler2D, uv).r, uv) - positionWorld.xyz / positionWorld.w);
+    float minDot = abs(dot(minDirection, n));
+
+    for (int x = -HBAO_SAMPLES; x < HBAO_SAMPLES; ++x)
+    {
+        vec2 sampleUV = uv + vec2(x*dx, 0);
+
+        vec3 sampleWorldPos = ViewPosFromDepth(texture(uDepthTextureSampler2D, sampleUV).r, sampleUV);
+        vec3 sampleDirection = normalize(sampleWorldPos - positionWorld.xyz / positionWorld.w);
+
+        float NoD = dot(n, sampleDirection);
+        if (abs(NoD) < abs(minDot))
+        {
+            minDot = NoD;
+            minDirection = sampleDirection;
+        }
+    }
+
+    for (int y = -HBAO_SAMPLES; y < HBAO_SAMPLES; ++y)
+    {
+        vec2 sampleUV = uv + vec2(0, y*dx);
+
+        vec3 sampleWorldPos = ViewPosFromDepth(texture(uDepthTextureSampler2D, sampleUV).r, sampleUV);
+        vec3 sampleDirection = normalize(sampleWorldPos - positionWorld.xyz / positionWorld.w);
+
+        float NoD = dot(n, sampleDirection);
+        if (abs(NoD) < abs(minDot))
+        {
+            minDot = NoD;
+            minDirection = sampleDirection;
+        }
+    }
+
+    return 1 - minDot;
+}
+
 vec3 CalculateRadiance(float shadowMapDepth, vec2 uv, vec3 n, vec3 shadowPosMVP, mat3 TBN)
 {
     vec3 viewDirection = -normalize(positionWorld.xyz / positionWorld.w - uCameraPos);
@@ -286,6 +346,7 @@ void main()
         }
         else{
             vec3 radiance = CalculateRadiance(shadowMapDepth, uv, n, shadowPosMVP, TBN);
+            //outColor = vec4(vec3(HBAO(uv, n)), 1);
             outColor = vec4(radiance, 1);
         }
     }

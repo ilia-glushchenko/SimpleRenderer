@@ -54,9 +54,13 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
 
     {
         SubPassDescriptor desc;
-        desc.dependencyCount = 1;
+        desc.dependencyCount = 2;
         desc.dependencies[0] = SubPassDependencyDescriptor{
             GL_TEXTURE0,
+            GL_TEXTURE_2D,
+            pipeline.depthPrePass.subPasses[0].desc.attachments[0].handle};
+        desc.dependencies[1] = SubPassDependencyDescriptor{
+            GL_TEXTURE1,
             GL_TEXTURE_2D,
             pipeline.shadowMapping.subPasses[0].desc.attachments[0].handle};
         desc.attachmentCount = 2;
@@ -114,6 +118,7 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
     {
         auto const texture1 = CreateLinearColorAttachment(width, height);
         auto const texture2 = CreateLinearColorAttachment(width, height);
+        auto const debug_texture = CreateLinearColorAttachment(width, height);
 
         SubPassDescriptor desc[2];
 
@@ -125,8 +130,9 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc[0].dependencies[2] = SubPassDependencyDescriptor{GL_TEXTURE2, GL_TEXTURE_2D, texture2};
         desc[0].dependencies[3] = SubPassDependencyDescriptor{
             GL_TEXTURE3, GL_TEXTURE_2D, pipeline.velocity.subPasses[0].desc.attachments[0].handle};
-        desc[0].attachmentCount = 1;
+        desc[0].attachmentCount = 2;
         desc[0].attachments[0] = SubPassAttachmentDescriptor{GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture1};
+        desc[0].attachments[1] = SubPassAttachmentDescriptor{GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, debug_texture};
         desc[0].depthMask = GL_FALSE;
         desc[0].depthFunc = GL_ALWAYS;
         desc[0].clearBufferMask = GL_COLOR_BUFFER_BIT;
@@ -136,8 +142,9 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc[1].dependencies[1] = desc[0].dependencies[1];
         desc[1].dependencies[2] = SubPassDependencyDescriptor{GL_TEXTURE2, GL_TEXTURE_2D, texture1};
         desc[1].dependencies[3] = desc[0].dependencies[3];
-        desc[1].attachmentCount = 1;
+        desc[1].attachmentCount = desc[0].attachmentCount;
         desc[1].attachments[0] = SubPassAttachmentDescriptor{GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture2};
+        desc[1].attachments[1] = desc[0].attachments[1];
         desc[1].depthMask = desc[0].depthMask;
         desc[1].depthFunc = desc[0].depthFunc;
         desc[1].clearBufferMask = desc[0].clearBufferMask;
@@ -169,7 +176,7 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
 
     {
         SubPassDescriptor desc;
-        desc.dependencyCount = 6;
+        desc.dependencyCount = 7;
         desc.dependencies[0] = SubPassDependencyDescriptor{
             GL_TEXTURE0,
             GL_TEXTURE_2D,
@@ -194,6 +201,10 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
             GL_TEXTURE5,
             GL_TEXTURE_2D,
             pipeline.taa.subPasses[0].desc.attachments[0].handle};
+        desc.dependencies[6] = SubPassDependencyDescriptor{
+            GL_TEXTURE6,
+            GL_TEXTURE_2D,
+            pipeline.taa.subPasses[0].desc.attachments[1].handle};
         desc.attachmentCount = 1;
         desc.attachments[0] = SubPassAttachmentDescriptor{
             GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreateLinearColorAttachment(width, height)};
