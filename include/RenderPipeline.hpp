@@ -102,10 +102,9 @@ Pipeline CreateRenderPipeline(PipelineShaderPrograms programs, int32_t width, in
         desc.attachments[0] = SubPassAttachmentDescriptor{
             GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, CreatePointColorAttachment(width, height)};
         desc.attachments[1] = SubPassAttachmentDescriptor{
-            GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, pipeline.depthPrePass.subPasses[0].desc.attachments[0].handle};
-        desc.depthMask = GL_FALSE;
-        desc.depthFunc = GL_LEQUAL;
-        desc.clearBufferMask = GL_COLOR_BUFFER_BIT;
+            GL_DEPTH_ATTACHMENT,
+            GL_TEXTURE_2D,
+            CreateDepthTexture(width, height)};
 
         auto const name = "Velocity";
         pipeline.velocity = CreateRenderPass(

@@ -41,13 +41,15 @@ bool IsNan(vec4 color)
 // #define NAN
 // #define TONE_MAPPING
 // #define COLOR_DIST
-//#define VELOCITY
+// #define VELOCITY
 
 void main()
 {
     vec3 lightingColor = texture(uLightingColorTextureSampler2D, uv).rgb;
     vec3 toneMappedColor = texture(uToneMappingTextureSampler2D, uv).rgb;
     vec3 taaColor = texture(uTaaDrawTextureSampler2D, uv).rgb;
+    vec2 velocityColor = texture(uVelocityTextureSampler2D, uv).xy;
+    float velicitySpeed = length(velocityColor);
 
     outColor = vec4(toneMappedColor, 1);
 
@@ -62,13 +64,27 @@ void main()
 #endif
 
 #ifdef COLOR_DIST
-    outColor = distance(toneMappedColor, taaColor) > 0.1f
-       ? vec4(1, 0, 0, 1) : vec4(0, 1, 0.5, 1);
+    outColor = distance(lightingColor, taaColor) > 0.1f
+       ? vec4(0.5, 0, 0, 1) : vec4(0, 0.5, 0.5, 1);
 #endif
 
 #ifdef VELOCITY
-    outColor = vec4(abs(texture(uVelocityTextureSampler2D, uv).xy) * 100, 0, 1);
+    outColor = vec4(vec3(length(velocityColor))* 100, 1);
 #endif
+
+    ivec2 wh = textureSize(uTaaDrawTextureSampler2D, 0);
+    float dx = 1.0f / wh.x;
+    float dy = 1.0f / wh.y;
+
+    vec3 up = texture(uTaaDrawTextureSampler2D, uv + vec2(0, dy)).rgb;
+    vec3 down = texture(uTaaDrawTextureSampler2D, uv + vec2(0, -dy)).rgb;
+    vec3 left = texture(uTaaDrawTextureSampler2D, uv + vec2(-dx, 0)).rgb;
+    vec3 right = texture(uTaaDrawTextureSampler2D, uv + vec2(dx, 0)).rgb;
+    //outColor = vec4(
+    //    clamp(taaColor + taaColor * 4 - up - down - left - right, 0, 1)
+    //,1.0);
+
+    //outColor = vec4(mix(vec3(velicitySpeed * 100), taaColor, 0.2), 1);
 
     //outColor = vec4((toneMappedColor - taaColor) * 1000f, 1);
 

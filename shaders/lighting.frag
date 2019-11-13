@@ -47,7 +47,7 @@ layout (location = 6) in vec2 inUv;
 
 layout (location = 0) out vec4 outColor;
 
-const float MipBias = -1.0;
+const float MipBias = -2.0;
 const float PI = 3.1415926535897932384626433832795;
 const vec3 SUN_LIGHT_COLOR = vec3(252.0 / 255.0, 212/ 255.0, 64 / 255.0); // Sun
 const vec3 POINT_LIGHT_COLOR = vec3(255.0 / 255.0, 209/ 255.0, 163 / 255.0); // 4000k

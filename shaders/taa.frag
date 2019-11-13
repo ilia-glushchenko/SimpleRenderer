@@ -119,9 +119,9 @@ vec2 SampleLocal3x3DepthMinimaUV(sampler2D tex, vec2 uv)
 
     vec2 minimaUV = uv;
     float minimaDepth = texture(tex, minimaUV).r;
-    for (uint y = -2; y < 3; ++y)
+    for (float y = -2; y < 3; y+=1)
     {
-        for (uint x = -2; x < 3; ++x)
+        for (float x = -2; x < 3; x+=1)
         {
             vec2 sampleUV = uv + vec2(x*dx, y*dy);
             float sampleDepth = texture(tex, sampleUV).r;

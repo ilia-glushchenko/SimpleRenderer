@@ -129,8 +129,8 @@ GLuint CreatePointColorAttachment(int32_t width, int32_t height)
     desc.type = GL_FLOAT;
     desc.sWrap = GL_CLAMP;
     desc.tWrap = GL_CLAMP;
-    desc.magFilter = GL_LINEAR;
-    desc.minFilter = GL_LINEAR;
+    desc.magFilter = GL_NEAREST;
+    desc.minFilter = GL_NEAREST;
     desc.maxAnisatropy = 1.f;
 
     CreateTextures(source, desc, &handle, 1);
