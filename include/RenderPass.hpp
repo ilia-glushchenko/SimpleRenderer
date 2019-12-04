@@ -272,16 +272,24 @@ void ExecuteRenderPass(RenderPass const &pass, RenderModel const *models, uint64
         {
             glBindFramebuffer(GL_FRAMEBUFFER, subPass.fbo);
             {
-                glClearColor(subPass.desc.clearColor.r,
-                             subPass.desc.clearColor.g,
-                             subPass.desc.clearColor.b,
-                             subPass.desc.clearColor.a);
-                glClearDepth(subPass.desc.clearDepth);
-                glDepthMask(subPass.desc.depthMask);
-                glDepthFunc(subPass.desc.depthFunc);
+                glClearColor(static_cast<float>(subPass.desc.colorClearValue[0]),
+                             static_cast<float>(subPass.desc.colorClearValue[1]),
+                             static_cast<float>(subPass.desc.colorClearValue[2]),
+                             static_cast<float>(subPass.desc.colorClearValue[3]));
+                glColorMask(subPass.desc.enableClearColorBuffer,
+                            subPass.desc.enableClearColorBuffer,
+                            subPass.desc.enableClearColorBuffer,
+                            subPass.desc.enableClearColorBuffer);
+
+                glClearDepth(static_cast<float>(subPass.desc.depthClearValue));
+                glDepthMask(subPass.desc.enableWriteToDepth);
+                glDepthFunc(subPass.desc.depthTestFunction);
+
                 glViewport(0, 0, pass.width, pass.height);
                 glScissor(0, 0, pass.width, pass.height);
-                glClear(subPass.desc.clearBufferMask);
+
+                glClear(
+                    (subPass.desc.enableClearColorBuffer ? ClearBufferMask::GL_COLOR_BUFFER_BIT : ClearBufferMask::GL_NONE_BIT) | (subPass.desc.enableClearDepthBuffer ? ClearBufferMask::GL_DEPTH_BUFFER_BIT : ClearBufferMask::GL_NONE_BIT));
 
                 glUseProgram(pass.program.handle);
                 UpdatePerFrameUniforms(pass.program);
@@ -332,4 +340,26 @@ void ExecuteBackBufferBlitRenderPass(GLuint fbo, GLenum attachment, int32_t widt
 #ifdef NDEBUG
     glPopGroupMarkerEXT();
 #endif
+}
+
+SubPassDescriptor CreateDefaultSubPassDescriptor()
+{
+    SubPassDescriptor desc;
+
+    desc.dependencyCount = 0;
+    desc.attachmentCount = 0;
+
+    desc.enableWriteToDepth = false;
+    desc.enableClearDepthBuffer = false;
+    desc.depthClearValue = 1;
+    desc.depthTestFunction = GL_ALWAYS;
+
+    desc.enableWriteToColor = false;
+    desc.enableClearColorBuffer = false;
+    memset(desc.colorClearValue, 0, sizeof(SubPassDescriptor::colorClearValue));
+
+    desc.prePassCallback = nullptr;
+    desc.postPassCallback = nullptr;
+
+    return desc;
 }

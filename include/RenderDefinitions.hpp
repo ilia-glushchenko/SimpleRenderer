@@ -107,9 +107,10 @@ struct UniformsDescriptor
 template <typename T>
 struct HeapArray
 {
-    T *data = nullptr;
-    uint32_t count = 0;
+    T *data;
+    uint32_t count;
 };
+static_assert(std::is_pod<HeapArray<int>>::value, "HeapArray mush be a POD type.");
 
 struct PerFrameUniformBindings
 {
@@ -135,10 +136,11 @@ struct ShaderProgram
 {
     PerFrameUniformBindings perFrameUniformBindings;
     PerModleUniformBindings perModelUniformBindings;
-    GLuint vertexShaderHandle = 0;
-    GLuint fragmentShaderHandle = 0;
-    GLuint handle = 0;
+    GLuint vertexShaderHandle;
+    GLuint fragmentShaderHandle;
+    GLuint handle;
 };
+static_assert(std::is_pod<ShaderProgram>::value, "ShaderProgram must be a POD type.");
 
 struct AttributeDescriptor
 {
@@ -186,42 +188,81 @@ struct SubPassAttachmentDescriptor
 
 struct SubPassDescriptor
 {
-    SubPassDependencyDescriptor dependencies[RENDER_PASS_MAX_DEPENDENCIES] = {};
-    uint8_t dependencyCount = 0;
-    SubPassAttachmentDescriptor attachments[RENDER_PASS_MAX_ATTACHMENTS] = {};
-    uint8_t attachmentCount = 0;
-    sr::math::Vec4 clearColor = {0, 0, 0, 0};
-    float clearDepth = 1.0f;
-    ClearBufferMask clearBufferMask = GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT;
-    GLboolean depthMask = GL_TRUE;
-    GLenum depthFunc = GL_LESS;
+    SubPassDependencyDescriptor dependencies[RENDER_PASS_MAX_DEPENDENCIES];
+    SubPassAttachmentDescriptor attachments[RENDER_PASS_MAX_ATTACHMENTS];
+
+    uint8_t dependencyCount;
+    uint8_t attachmentCount;
+
+    bool enableWriteToDepth;
+    bool enableClearDepthBuffer;
+    uint8_t depthClearValue;
+    GLenum depthTestFunction;
+
+    bool enableWriteToColor;
+    bool enableClearColorBuffer;
+    uint8_t colorClearValue[4];
+
+    void (*prePassCallback)();
+    void (*postPassCallback)();
 };
+static_assert(std::is_pod<SubPassDescriptor>::value, "SubPassDescriptor must be a POD type.");
 
 struct SubPass
 {
     SubPassDescriptor desc;
-    GLuint fbo = 0;
-    bool active = false;
+    GLuint fbo;
+    bool active;
 };
+static_assert(std::is_pod<SubPass>::value, "SubPass must be a POD type.");
 
 constexpr uint8_t SHORT_STRING_MAX_LENGTH = 64;
 struct ShortString
 {
-    char data[SHORT_STRING_MAX_LENGTH] = {};
-    uint8_t length = 0;
+    char data[SHORT_STRING_MAX_LENGTH];
+    uint8_t length;
 };
+static_assert(std::is_pod<ShortString>::value, "ShortString must be a POD type.");
 
 struct RenderPass
 {
     ShortString name;
-    SubPass subPasses[RENDER_PASS_MAX_SUBPASS] = {};
-    ShaderProgram program = {};
-    int32_t width = 0;
-    int32_t height = 0;
-    uint8_t subPassCount = 0;
+    SubPass subPasses[RENDER_PASS_MAX_SUBPASS];
+    ShaderProgram program;
+    int32_t width;
+    int32_t height;
+    uint8_t subPassCount;
+};
+static_assert(std::is_pod<RenderPass>::value, "RenderPass must be a POD type.");
+
+struct DeferredPipelineShaderPrograms
+{
+    ShaderProgram depthPrePass;
+    ShaderProgram gBufferPass;
+    ShaderProgram lighting;
+    ShaderProgram debug;
 };
 
-struct PipelineShaderPrograms
+constexpr uint8_t DefferPipelinePassCount = 4;
+struct DeferredPipeline
+{
+    union {
+        RenderPass passes[DefferPipelinePassCount];
+
+        struct
+        {
+            RenderPass depthPrePass;
+            RenderPass gBufferPass;
+            RenderPass lighting;
+            RenderPass debug;
+        };
+    };
+};
+static_assert((int)sizeof(DeferredPipeline) - (int)sizeof(DeferredPipeline::passes) == 0,
+              "Number of named and unnamed render passes must be equal!");
+static_assert(std::is_pod<DeferredPipeline>::value, "DeferredPipeline must be a POD type.");
+
+struct ForwardPipelineShaderPrograms
 {
     ShaderProgram depthPrePass;
     ShaderProgram shadowMapping;
@@ -233,17 +274,28 @@ struct PipelineShaderPrograms
     ShaderProgram debug;
 };
 
-struct Pipeline
+constexpr uint8_t ForwardPipelinePassCount = 8;
+struct ForwardPipeline
 {
-    RenderPass depthPrePass;
-    RenderPass shadowMapping;
-    RenderPass lighting;
-    RenderPass transparent;
-    RenderPass velocity;
-    RenderPass taa;
-    RenderPass toneMapping;
-    RenderPass debug;
+    union {
+        RenderPass passes[ForwardPipelinePassCount];
+
+        struct
+        {
+            RenderPass depthPrePass;
+            RenderPass shadowMapping;
+            RenderPass lighting;
+            RenderPass transparent;
+            RenderPass velocity;
+            RenderPass taa;
+            RenderPass toneMapping;
+            RenderPass debug;
+        };
+    };
 };
+static_assert((int)sizeof(ForwardPipeline) - (int)sizeof(ForwardPipeline::passes) == 0,
+              "Number of named and unnamed render passes must be equal!");
+static_assert(std::is_pod<ForwardPipeline>::value, "ForwardPipeline must be a POD type.");
 
 struct TAABuffer
 {
@@ -320,7 +372,28 @@ struct DirectionalLightSource
     float radiantFlux = 1.5f;
 };
 
-struct ShadowingMaskingFunction
+template <typename T>
+struct SmallStackArray
 {
+    static constexpr uint8_t CAPACITY = 8;
+    T data[CAPACITY] = {};
+    uint8_t lenght = 0;
+};
 
+struct Technique
+{
+    SmallStackArray<float> dataF1 = {};
+    SmallStackArray<ShortString> namesF1 = {};
+
+    SmallStackArray<sr::math::Vec2> dataF2 = {};
+    SmallStackArray<ShortString> namesF2 = {};
+
+    SmallStackArray<sr::math::Vec3> dataF3 = {};
+    SmallStackArray<ShortString> namesF3 = {};
+
+    SmallStackArray<sr::math::Vec4> dataF4 = {};
+    SmallStackArray<ShortString> namesF4 = {};
+
+    SmallStackArray<sr::math::Matrix4x4> dataF16 = {};
+    SmallStackArray<ShortString> namesF16 = {};
 };

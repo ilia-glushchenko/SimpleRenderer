@@ -313,6 +313,7 @@ std::vector<RenderModel> LoadDynamicModels(ShaderProgram const &program)
     auto const vertexBufferDescriptors = sr::load::CreateBufferDescriptors(geometries.back());
     auto const indexBufferDescriptor = sr::load::CreateIndexBufferDescriptor(geometries.back());
 
+    if (false)
     {
         tinyobj::material_t material;
         material.diffuse_texname = "Brick_wall_006_COLOR.jpg";
@@ -410,9 +411,9 @@ std::vector<RenderModel> LoadAABBModels(ShaderProgram const &program, std::vecto
     return models;
 }
 
-PipelineShaderPrograms CreatePipelineShaderPrograms()
+ForwardPipelineShaderPrograms CreateForwardPipelineShaderPrograms()
 {
-    PipelineShaderPrograms desc;
+    ForwardPipelineShaderPrograms desc;
 
     desc.depthPrePass = CreateShaderProgram("shaders/depth_pre_pass.vert", "shaders/depth_pre_pass.frag");
     desc.shadowMapping = CreateShaderProgram("shaders/shadow_mapping.vert", "shaders/shadow_mapping.frag");
@@ -429,9 +430,9 @@ PipelineShaderPrograms CreatePipelineShaderPrograms()
     return desc;
 }
 
-void CreatePipelineUniformBindngs(PipelineShaderPrograms &desc,
-                                  std::vector<RenderModel> const &opaqueModels,
-                                  std::vector<RenderModel> const &transparentModels)
+void CreateForwardPipelineUniformBindngs(ForwardPipelineShaderPrograms &desc,
+                                         std::vector<RenderModel> const &opaqueModels,
+                                         std::vector<RenderModel> const &transparentModels)
 {
     {
         CreateShaderProgramUniformBindings(
@@ -854,7 +855,7 @@ void UpdateModels(std::vector<RenderModel> &models)
     models.back().model = sr::math::CreateRotationMatrixY(0.01f) * models.back().model;
 }
 
-void PrePassCommands(Pipeline &pipeline, std::vector<RenderModel> &models)
+void PrePassCommands(ForwardPipeline &pipeline, std::vector<RenderModel> &models)
 {
     { // Update shadow map view frustum
         g_directLight.view = sr::math::CreateRotationMatrixZ(-g_directLight.orientation.z) *
@@ -953,7 +954,7 @@ void PrePassCommands(Pipeline &pipeline, std::vector<RenderModel> &models)
     }
 }
 
-void RenderPassDepthPrePass(Pipeline &pipeline, std::vector<RenderModel> const &models)
+void RenderPassDepthPrePass(ForwardPipeline &pipeline, std::vector<RenderModel> const &models)
 {
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(g_depthBiasScale, g_depthUnitScale);
@@ -963,27 +964,7 @@ void RenderPassDepthPrePass(Pipeline &pipeline, std::vector<RenderModel> const &
     glDisable(GL_POLYGON_OFFSET_FILL);
 }
 
-void RenderPassShadowMap(Pipeline &pipeline, std::vector<RenderModel> const &models)
-{
-    ExecuteRenderPass(pipeline.shadowMapping, models.data(), models.size());
-}
-
-void RenderPassLighting(Pipeline &pipeline, std::vector<RenderModel> const &models)
-{
-    ExecuteRenderPass(pipeline.lighting, models.data(), models.size());
-}
-
-void RenderPassTransparency(Pipeline &pipeline, std::vector<RenderModel> const &models)
-{
-    ExecuteRenderPass(pipeline.transparent, models.data(), models.size());
-}
-
-void RenderPassVelocity(Pipeline &pipeline, std::vector<RenderModel> const &models)
-{
-    ExecuteRenderPass(pipeline.velocity, models.data(), models.size());
-}
-
-void RenderPassTAA(Pipeline &pipeline)
+void RenderPassTAA(ForwardPipeline &pipeline)
 {
     ExecuteRenderPass(pipeline.taa, &g_quadWallRenderModel, 1);
 
@@ -993,7 +974,7 @@ void RenderPassTAA(Pipeline &pipeline)
     g_taaBuffer.count++;
 }
 
-void RenderPassToneMapping(Pipeline &pipeline)
+void RenderPassToneMapping(ForwardPipeline &pipeline)
 {
     ExecuteRenderPass(pipeline.toneMapping, &g_quadWallRenderModel, 1);
 
@@ -1003,7 +984,7 @@ void RenderPassToneMapping(Pipeline &pipeline)
             : pipeline.taa.subPasses[1].desc.attachments[0].handle;
 }
 
-void RenderPassDebug(Pipeline &pipeline)
+void RenderPassDebug(ForwardPipeline &pipeline)
 {
     ExecuteRenderPass(pipeline.debug, &g_quadWallRenderModel, 1);
 
@@ -1019,7 +1000,7 @@ void MainLoop(GLFWwindow *window)
     std::vector<sr::load::Geometry> geometries;
     std::vector<sr::load::MaterialSource> materials;
 
-    auto programs = CreatePipelineShaderPrograms();
+    auto programs = CreateForwardPipelineShaderPrograms();
     auto opaqueModels = LoadOpaqueModels(programs.lighting);
     auto transparentModels = LoadAABBModels(programs.transparent, opaqueModels);
     auto pointLightModels = LoadPointLightModels(programs.lighting);
@@ -1030,8 +1011,8 @@ void MainLoop(GLFWwindow *window)
     std::vector<RenderModel>().swap(dynamicModels);
 
     g_taaBuffer.prevModels.resize(opaqueModels.size());
-    CreatePipelineUniformBindngs(programs, opaqueModels, transparentModels);
-    auto pipeline = CreateRenderPipeline(programs, swapchainFramebufferWidth, swapchainFramebufferHeight);
+    CreateForwardPipelineUniformBindngs(programs, opaqueModels, transparentModels);
+    auto forwardPipeline = CreateForwardRenderPipeline(programs, swapchainFramebufferWidth, swapchainFramebufferHeight);
 
     while (!glfwWindowShouldClose(window))
     {
@@ -1040,12 +1021,14 @@ void MainLoop(GLFWwindow *window)
 
         if (g_isHotRealoadRequired)
         {
-            DeleteRenderPipeline(pipeline);
+            DeleteRenderPipeline(forwardPipeline.passes, ForwardPipelinePassCount);
 
-            programs = CreatePipelineShaderPrograms();
-            CreatePipelineUniformBindngs(programs, opaqueModels, transparentModels);
-            pipeline = CreateRenderPipeline(programs, swapchainFramebufferWidth, swapchainFramebufferHeight);
-
+            programs = CreateForwardPipelineShaderPrograms();
+            CreateForwardPipelineUniformBindngs(programs, opaqueModels, transparentModels);
+            memcpy(&forwardPipeline,
+                &CreateForwardRenderPipeline(programs, swapchainFramebufferWidth, swapchainFramebufferHeight),
+                sizeof(ForwardPipeline));
+            
             std::time_t const timestamp = std::time(nullptr);
             std::cout << "Backbuffer size: " << swapchainFramebufferWidth << "x" << swapchainFramebufferHeight
                       << "\nHot reload: " << std::asctime(std::localtime(&timestamp)) << std::endl;
@@ -1053,22 +1036,22 @@ void MainLoop(GLFWwindow *window)
             g_isHotRealoadRequired = false;
         }
 
-        PrePassCommands(pipeline, opaqueModels);
+        PrePassCommands(forwardPipeline, opaqueModels);
 
-        RenderPassDepthPrePass(pipeline, opaqueModels);
-        RenderPassShadowMap(pipeline, opaqueModels);
-        RenderPassLighting(pipeline, opaqueModels);
+        RenderPassDepthPrePass(forwardPipeline, opaqueModels);
+        ExecuteRenderPass(forwardPipeline.shadowMapping, opaqueModels.data(), opaqueModels.size());
+        ExecuteRenderPass(forwardPipeline.lighting, opaqueModels.data(), opaqueModels.size());
         if (g_drawAABBs)
         {
-            RenderPassTransparency(pipeline, transparentModels);
+            ExecuteRenderPass(forwardPipeline.transparent, transparentModels.data(), transparentModels.size());
         }
-        RenderPassVelocity(pipeline, opaqueModels);
-        RenderPassTAA(pipeline);
-        RenderPassToneMapping(pipeline);
-        RenderPassDebug(pipeline);
+        ExecuteRenderPass(forwardPipeline.velocity, opaqueModels.data(), opaqueModels.size());
+        RenderPassTAA(forwardPipeline);
+        RenderPassToneMapping(forwardPipeline);
+        RenderPassDebug(forwardPipeline);
 
         ExecuteBackBufferBlitRenderPass(
-            pipeline.debug.subPasses[0].fbo,
+            forwardPipeline.debug.subPasses[0].fbo,
             GL_COLOR_ATTACHMENT0,
             swapchainFramebufferWidth,
             swapchainFramebufferHeight);
